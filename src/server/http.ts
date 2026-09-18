@@ -109,6 +109,22 @@ export async function startServer(options: StartServerOptions): Promise<ServerHa
   });
 
   const clients = new Set<SseClient>();
+  /**
+   * The scan in flight, if any. `close()` awaits it: a scan writes the parse
+   * cache, and a server that returns from `close()` while a write is still
+   * pending leaves the caller unable to clean up after it.
+   */
+  let inFlight: Promise<unknown> | null = null;
+
+  function startScan(): void {
+    const run = scanner.scan().then(
+      (r) => broadcast('scan', { sessions: r.sessions.length, durationMs: r.durationMs }),
+      () => undefined,
+    );
+    inFlight = run.finally(() => {
+      if (inFlight === run) inFlight = null;
+    });
+  }
 
   function broadcast(event: string, data: unknown): void {
     const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
@@ -275,10 +291,7 @@ export async function startServer(options: StartServerOptions): Promise<ServerHa
       }
 
       case 'POST /api/rescan':
-        void scanner.scan().then(
-          (r) => broadcast('scan', { sessions: r.sessions.length, durationMs: r.durationMs }),
-          () => undefined,
-        );
+        startScan();
         json(res, 202, { started: true });
         return;
 
@@ -290,10 +303,7 @@ export async function startServer(options: StartServerOptions): Promise<ServerHa
         await saveConfig(merged);
         config = merged;
         scanner.updateConfig(merged);
-        void scanner.scan().then(
-          (r) => broadcast('scan', { sessions: r.sessions.length, durationMs: r.durationMs }),
-          () => undefined,
-        );
+        startScan();
         json(res, 200, merged);
         return;
       }
@@ -340,17 +350,11 @@ export async function startServer(options: StartServerOptions): Promise<ServerHa
   // a cheap stat-based rescan behaves identically everywhere.
   const timer = setInterval(() => {
     if (scanner.isScanning) return;
-    void scanner.scan().then(
-      (r) => broadcast('scan', { sessions: r.sessions.length, durationMs: r.durationMs }),
-      () => undefined,
-    );
+    startScan();
   }, config.refreshIntervalMs);
   timer.unref?.();
 
-  void scanner.scan().then(
-    (r) => broadcast('scan', { sessions: r.sessions.length, durationMs: r.durationMs }),
-    () => undefined,
-  );
+  startScan();
 
   return {
     url: `http://127.0.0.1:${port}`,
@@ -361,6 +365,8 @@ export async function startServer(options: StartServerOptions): Promise<ServerHa
       for (const client of clients) client.res.end();
       clients.clear();
       await new Promise<void>((resolve) => server.close(() => resolve()));
+      // Let the current scan finish writing before returning.
+      await inFlight?.catch(() => undefined);
     },
   };
 }

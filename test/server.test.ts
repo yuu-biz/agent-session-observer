@@ -46,7 +46,9 @@ afterAll(async () => {
   await server.close();
   if (original === undefined) delete process.env.AGENT_SESSION_OBSERVER_HOME;
   else process.env.AGENT_SESSION_OBSERVER_HOME = original;
-  await rm(cacheHome, { recursive: true, force: true });
+  // Retries guard against a filesystem that is still settling on slower CI
+  // runners; the server has already awaited its own writes by this point.
+  await rm(cacheHome, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
 });
 
 describe('server binding', () => {
