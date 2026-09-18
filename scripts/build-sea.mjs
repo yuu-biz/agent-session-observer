@@ -66,6 +66,18 @@ console.log('• copying the Node binary');
 const exePath = path.join(buildDir, outName);
 copyFileSync(process.execPath, exePath);
 
+// On macOS the binary is signed, and injecting into a signed Mach-O invalidates
+// the signature so hard that the OS refuses to run it. The signature has to be
+// removed first and an ad-hoc one applied afterwards.
+if (process.platform === 'darwin') {
+  console.log('• removing the existing macOS signature');
+  try {
+    run('codesign', ['--remove-signature', exePath]);
+  } catch {
+    console.warn('  (no signature to remove)');
+  }
+}
+
 console.log('• injecting the blob');
 const postject = path.join(root, 'node_modules', 'postject', 'dist', 'cli.js');
 const injectArgs = [

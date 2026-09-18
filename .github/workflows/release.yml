@@ -31,11 +31,11 @@ jobs:
         with:
           ref: ${{ github.event.inputs.tag || github.ref }}
 
-      # The Node version is pinned so the embedded runtime in the standalone
-      # executable is identical across builds of the same tag.
+      # Pinned to a single major so the runtime embedded in the standalone
+      # executable is consistent across the three platform builds of a tag.
       - uses: actions/setup-node@v5
         with:
-          node-version: '22.21.1'
+          node-version: '22'
           cache: npm
 
       - run: npm ci
@@ -69,11 +69,30 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # macOS ships `shasum`, not `sha256sum`.
+          if command -v sha256sum >/dev/null 2>&1; then
+            hash() { sha256sum "$1"; }
+          else
+            hash() { shasum -a 256 "$1"; }
+          fi
           for f in agent-session-observer-*.zip agent-session-observer-*.tar.gz; do
             [ -e "$f" ] || continue
-            sha256sum "$f" > "$f.sha256"
+            hash "$f" > "$f.sha256"
             cat "$f.sha256"
           done
+
+      - name: Smoke test the executable
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            bin="build/sea/agent-session-observer.exe"
+          else
+            bin="build/sea/agent-session-observer"
+          fi
+          cp -r dist "build/sea/dist"
+          "$bin" --version
+          "$bin" --doctor
 
       - uses: actions/upload-artifact@v4
         with:
