@@ -8,7 +8,7 @@ import { localTimeZoneName } from '../core/time.js';
 import { discoverRoots } from '../discovery/roots.js';
 import { startServer } from '../server/http.js';
 
-export const VERSION = '0.1.0';
+export const VERSION = '0.1.1';
 
 const HELP = `agent-session-observer ${VERSION}
 
