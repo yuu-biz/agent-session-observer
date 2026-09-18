@@ -5,7 +5,13 @@ import path from 'node:path';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { DEFAULT_CONFIG } from '../src/core/config.js';
+import { configDir, DEFAULT_CONFIG } from '../src/core/config.js';
+import {
+  appBrowserArgs,
+  appProfileDir,
+  findAppBrowser,
+  hideConsoleWindow,
+} from '../src/cli/app-window.js';
 import { startServer, type ServerHandle } from '../src/server/http.js';
 import { parseArgs } from '../src/cli/main.js';
 import { CLAUDE_ROOT, CODEX_ROOT } from './helpers.js';
@@ -181,5 +187,36 @@ describe('cli argument parsing', () => {
 
   it('defaults to opening a browser', () => {
     expect(parseArgs([]).open).toBe(true);
+  });
+});
+
+describe('app window mode', () => {
+  it('is off unless asked for, and is incompatible with --dev', () => {
+    expect(parseArgs([]).app).toBe(false);
+    expect(parseArgs(['--app']).app).toBe(true);
+    // --dev serves the API only, so an app window would point at nothing.
+    expect(parseArgs(['--app', '--dev']).app).toBe(false);
+  });
+
+  it('builds browser arguments that give a real window, not a delegated tab', () => {
+    const args = appBrowserArgs('http://127.0.0.1:7781', '/tmp/profile');
+    expect(args).toContain('--app=http://127.0.0.1:7781');
+    // Without its own profile the browser hands the URL to a running instance
+    // and exits, which would break close-the-window-to-quit.
+    expect(args).toContain('--user-data-dir=/tmp/profile');
+    expect(args).toContain('--no-first-run');
+  });
+
+  it('keeps the app profile inside this app’s own directory', () => {
+    expect(appProfileDir().startsWith(configDir())).toBe(true);
+  });
+
+  it('reports no browser on a platform with none of the known paths', () => {
+    // A platform string no candidate list matches must return null, not throw.
+    expect(findAppBrowser('aix' as NodeJS.Platform)).toBeNull();
+  });
+
+  it('never throws when asked to hide a console it does not have', () => {
+    expect(() => hideConsoleWindow()).not.toThrow();
   });
 });

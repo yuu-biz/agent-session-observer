@@ -4,11 +4,17 @@ import { realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 import { DEFAULT_CONFIG, loadConfig, type AppConfig } from '../core/config.js';
+import {
+  appProfileDir,
+  findAppBrowser,
+  hideConsoleWindow,
+  launchAppWindow,
+} from './app-window.js';
 import { localTimeZoneName } from '../core/time.js';
 import { discoverRoots } from '../discovery/roots.js';
 import { startServer } from '../server/http.js';
 
-export const VERSION = '0.1.1';
+export const VERSION = '0.1.2';
 
 const HELP = `agent-session-observer ${VERSION}
 
@@ -18,6 +24,9 @@ Usage:
   agent-session-observer [options]
 
 Options:
+  --app             Open in a standalone app window instead of a browser tab.
+                    Uses the Chromium browser you already have, hides the
+                    console on Windows, and exits when the window is closed.
   --port <n>        Port to listen on (default 7781, 0 for any free port)
   --no-open         Do not open a browser
   --doctor          Print what was auto-discovered and exit
@@ -33,6 +42,7 @@ server listens on 127.0.0.1 only.
 interface CliArgs {
   port?: number;
   open: boolean;
+  app: boolean;
   doctor: boolean;
   dev: boolean;
   wsl?: AppConfig['wslMode'];
@@ -41,7 +51,14 @@ interface CliArgs {
 }
 
 export function parseArgs(argv: readonly string[]): CliArgs {
-  const args: CliArgs = { open: true, doctor: false, dev: false, help: false, version: false };
+  const args: CliArgs = {
+    open: true,
+    app: false,
+    doctor: false,
+    dev: false,
+    help: false,
+    version: false,
+  };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     switch (arg) {
@@ -54,12 +71,16 @@ export function parseArgs(argv: readonly string[]): CliArgs {
       case '--no-open':
         args.open = false;
         break;
+      case '--app':
+        args.app = true;
+        break;
       case '--doctor':
         args.doctor = true;
         break;
       case '--dev':
         args.dev = true;
         args.open = false;
+        args.app = false;
         break;
       case '--wsl': {
         const value = argv[i + 1];
@@ -147,18 +168,40 @@ export async function main(argv: readonly string[] = process.argv.slice(2)): Pro
 
   const handle = await startServer({ config, dev: args.dev, version: VERSION });
 
-  console.log(`agent-session-observer ${VERSION}`);
-  console.log(`  ${handle.url}`);
-  console.log('  local only — no telemetry, no outbound requests');
-  console.log('  press Ctrl+C to stop');
-
-  if (args.open) openBrowser(handle.url);
-
   const shutdown = (): void => {
     void handle.close().then(() => process.exit(0));
   };
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
+
+  const browser = args.app ? findAppBrowser() : null;
+
+  console.log(`agent-session-observer ${VERSION}`);
+  console.log(`  ${handle.url}`);
+  console.log('  local only — no telemetry, no outbound requests');
+
+  if (args.app && !browser) {
+    console.log('  no Chromium-based browser found for --app; opening a normal tab instead');
+  }
+
+  if (browser) {
+    console.log(`  app window via ${browser}`);
+    console.log('  close the window to stop');
+    // Hidden first so the console flashes for as little time as possible; the
+    // lines above are still written for anyone capturing stdout to a pipe.
+    hideConsoleWindow();
+    const window = launchAppWindow(browser, handle.url, appProfileDir());
+    window.closed.then(
+      (userClosedIt) => {
+        if (userClosedIt) shutdown();
+      },
+      () => undefined,
+    );
+    return;
+  }
+
+  console.log('  press Ctrl+C to stop');
+  if (args.open) openBrowser(handle.url);
 }
 
 /** True when this file was run as the entry point rather than imported. */

@@ -49,9 +49,11 @@ These are enforced in code and covered by tests (`test/server.test.ts`,
   Distributions that are not already running are **not** read, because touching
   `\\wsl.localhost\<distro>\` would boot them. `--wsl all` opts out of that
   protection explicitly.
-- The only other process ever launched is the platform's "open a URL" helper
-  (`cmd /c start`, `open`, `xdg-open`), and only when you did not pass
-  `--no-open`.
+- The only other processes ever launched are the platform's "open a URL" helper
+  (`cmd /c start`, `open`, `xdg-open`) unless you pass `--no-open`, and — only
+  with `--app` — the Chromium-based browser already installed on the machine,
+  plus a short PowerShell call on Windows that hides this process's own console
+  window. Nothing is downloaded, and no browser is bundled.
 - Liveness checks use `process.kill(pid, 0)`, which sends no signal.
 
 **Data handling**

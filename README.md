@@ -62,6 +62,7 @@ Either way it starts a local server on `http://127.0.0.1:7781` and opens your
 browser.
 
 ```
+agent-session-observer --app         # open as a desktop app window (see below)
 agent-session-observer --doctor      # print what was auto-discovered, then exit
 agent-session-observer --port 8080   # use a different port
 agent-session-observer --no-open     # don't launch a browser
@@ -69,6 +70,25 @@ agent-session-observer --wsl off     # skip WSL scanning entirely
 ```
 
 > Running from source? Use `node dist/cli/main.js <flags>`.
+
+### App window mode
+
+`--app` makes it behave like a desktop application rather than a browser tab,
+without shipping a second browser engine:
+
+- it opens in a window with **no tab strip and no address bar**, using the
+  Chromium-based browser you already have (Edge, Chrome, Brave, Vivaldi,
+  Chromium);
+- on Windows the **console window is hidden**, so nothing sits behind the app;
+- **closing the window quits the app**, server included.
+
+The window uses its own browser profile under `~/.agent-session-observer/`, so
+it stays out of the way of your normal browsing — and so that closing it is
+something the app can actually detect. If no Chromium-based browser is found it
+falls back to opening a normal tab and says so.
+
+On Windows, the usual setup is a shortcut to the executable with `--app`
+appended to its target.
 
 ## Auto discovery
 
