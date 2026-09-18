@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import http from 'node:http';
 import os from 'node:os';
@@ -211,9 +212,14 @@ describe('app window mode', () => {
     expect(appProfileDir().startsWith(configDir())).toBe(true);
   });
 
-  it('reports no browser on a platform with none of the known paths', () => {
-    // A platform string no candidate list matches must return null, not throw.
-    expect(findAppBrowser('aix' as NodeJS.Platform)).toBeNull();
+  it('only ever reports a browser that is really there', () => {
+    // Any platform string must yield either null or a path that exists - never
+    // a guess. Platforms other than win32/darwin share the Linux PATH lookup,
+    // so this holds on CI runners that do have Chrome installed.
+    for (const platform of ['win32', 'darwin', 'linux', 'freebsd'] as NodeJS.Platform[]) {
+      const found = findAppBrowser(platform);
+      expect(found === null || existsSync(found)).toBe(true);
+    }
   });
 
   it('never throws when asked to hide a console it does not have', () => {
