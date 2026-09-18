@@ -1,0 +1,106 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag to build (e.g. v0.1.0)
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  artifacts:
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            label: windows-x64
+          - os: ubuntu-latest
+            label: linux-x64
+          - os: macos-latest
+            label: macos-arm64
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      # The Node version is pinned so the embedded runtime in the standalone
+      # executable is identical across builds of the same tag.
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22.21.1'
+          cache: npm
+
+      - run: npm ci
+      - run: npm run verify
+
+      - name: Build standalone executable
+        run: npm run package:sea
+
+      - name: Stage the archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="agent-session-observer-${{ matrix.label }}"
+          mkdir -p "stage/$out"
+          cp -r dist "stage/$out/dist"
+          cp README.md LICENSE SECURITY.md "stage/$out/"
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            cp build/sea/agent-session-observer.exe "stage/$out/"
+          else
+            cp build/sea/agent-session-observer "stage/$out/"
+            chmod +x "stage/$out/agent-session-observer"
+          fi
+          cd stage
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            7z a -tzip "../$out.zip" "$out" >/dev/null
+          else
+            tar -czf "../$out.tar.gz" "$out"
+          fi
+
+      - name: Checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          for f in agent-session-observer-*.zip agent-session-observer-*.tar.gz; do
+            [ -e "$f" ] || continue
+            sha256sum "$f" > "$f.sha256"
+            cat "$f.sha256"
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.label }}
+          path: |
+            agent-session-observer-*.zip
+            agent-session-observer-*.tar.gz
+            agent-session-observer-*.sha256
+          if-no-files-found: error
+
+  publish:
+    name: Publish release
+    needs: artifacts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: List artifacts
+        run: ls -la artifacts
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          files: artifacts/*
+          generate_release_notes: true
+          fail_on_unmatched_files: true
