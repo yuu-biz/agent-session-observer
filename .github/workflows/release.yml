@@ -50,7 +50,8 @@ jobs:
           set -euo pipefail
           out="agent-session-observer-${{ matrix.label }}"
           mkdir -p "stage/$out"
-          cp -r dist "stage/$out/dist"
+          # The UI is embedded in the binary, so the archive is the binary plus
+          # the documents a user should be able to read before running it.
           cp README.md LICENSE SECURITY.md "stage/$out/"
           if [ "${{ runner.os }}" = "Windows" ]; then
             cp build/sea/agent-session-observer.exe "stage/$out/"
@@ -85,14 +86,33 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # Copied somewhere with no dist/ beside it: the binary has to be
+          # genuinely self-contained, and serve its embedded UI from there.
+          mkdir -p smoke
           if [ "${{ runner.os }}" = "Windows" ]; then
-            bin="build/sea/agent-session-observer.exe"
+            cp build/sea/agent-session-observer.exe smoke/
+            bin="./agent-session-observer.exe"
           else
-            bin="build/sea/agent-session-observer"
+            cp build/sea/agent-session-observer smoke/
+            bin="./agent-session-observer"
           fi
-          cp -r dist "build/sea/dist"
+          cd smoke
           "$bin" --version
           "$bin" --doctor
+          "$bin" --port 7799 --no-open &
+          pid=$!
+          for i in $(seq 1 30); do
+            if curl -fsS -o /dev/null http://127.0.0.1:7799/api/status; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:7799/api/status > /dev/null
+          html=$(curl -fsS http://127.0.0.1:7799/)
+          echo "$html" | grep -q '<div id="root">'
+          asset=$(echo "$html" | grep -o 'assets/[^"]*\.js' | head -1)
+          test -n "$asset"
+          curl -fsS -o /dev/null "http://127.0.0.1:7799/$asset"
+          echo "embedded UI served from a standalone binary: OK"
+          kill $pid
 
       - uses: actions/upload-artifact@v4
         with:

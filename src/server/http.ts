@@ -1,13 +1,12 @@
-import { createReadStream, existsSync, promises as fs } from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import { loadConfig, normalizeConfig, saveConfig, type AppConfig } from '../core/config.js';
 import { localDayKey, localTimeZoneName } from '../core/time.js';
 import type { ProviderId } from '../core/types.js';
 import { SessionScanner, type ScanProgress } from '../indexer/scanner.js';
 import { buildComparison, buildDay, buildOverview, type StatusResponse } from './api.js';
+import { getAssetSource, normalizeAssetPath } from './assets.js';
 
 /**
  * Local HTTP server.
@@ -21,33 +20,6 @@ import { buildComparison, buildDay, buildOverview, type StatusResponse } from '.
  *    re-checked against that directory after normalisation;
  *  - makes no outbound network calls of any kind.
  */
-
-/**
- * Where the bundled UI lives.
- *
- * Three shapes have to work: a normal `npm install` (assets sit beside the
- * compiled server), a standalone executable with `dist/` next to it, and one
- * with the assets flattened beside the binary. `import.meta.url` is unavailable
- * inside a single-executable build, so its absence is expected, not an error.
- */
-function resolveStaticDir(): string {
-  const candidates: string[] = [];
-  try {
-    const moduleDir = path.dirname(fileURLToPath(import.meta.url));
-    candidates.push(path.join(moduleDir, '..', 'web'));
-  } catch {
-    // Bundled into a single executable; fall through to exec-relative paths.
-  }
-  const execDir = path.dirname(process.execPath);
-  candidates.push(path.join(execDir, 'dist', 'web'), path.join(execDir, 'web'));
-
-  for (const dir of candidates) {
-    if (existsSync(path.join(dir, 'index.html'))) return dir;
-  }
-  return candidates[0] ?? path.join(execDir, 'web');
-}
-
-const STATIC_DIR = resolveStaticDir();
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -185,36 +157,34 @@ export async function startServer(options: StartServerOptions): Promise<ServerHa
       json(res, 404, { error: 'dev mode: run `npm run dev:web` and use the Vite URL' });
       return;
     }
-    const rel = urlPath === '/' ? 'index.html' : urlPath.replace(/^\/+/, '');
-    const resolved = path.resolve(STATIC_DIR, rel);
-    // Re-check after resolution: this is what makes `../` traversal impossible.
-    if (resolved !== STATIC_DIR && !resolved.startsWith(STATIC_DIR + path.sep)) {
+
+    const rel = normalizeAssetPath(urlPath);
+    if (rel === null) {
       json(res, 403, { error: 'forbidden' });
       return;
     }
 
-    let target = resolved;
-    try {
-      const st = await fs.stat(target);
-      if (st.isDirectory()) target = path.join(target, 'index.html');
-    } catch {
-      // Single-page app: unknown paths fall back to the shell document.
-      target = path.join(STATIC_DIR, 'index.html');
-    }
-
-    try {
-      await fs.access(target);
-    } catch {
-      json(res, 404, { error: 'not found' });
+    const source = await getAssetSource();
+    // Single-page app: an unknown path is a client route, so fall back to the
+    // shell document rather than 404ing the user out of the app.
+    const asset = (await source.read(rel)) ?? (await source.read('index.html'));
+    if (!asset) {
+      json(res, 404, {
+        error: 'UI assets are not available in this build',
+        assetSource: source.description,
+      });
       return;
     }
 
+    const servedName = asset.source.endsWith('index.html') ? 'index.html' : rel;
     res.writeHead(200, {
-      'content-type': MIME[path.extname(target).toLowerCase()] ?? 'application/octet-stream',
-      'cache-control': target.endsWith('index.html') ? 'no-store' : 'public, max-age=3600',
+      'content-type': MIME[path.extname(servedName).toLowerCase()] ?? 'application/octet-stream',
+      'content-length': asset.data.byteLength,
+      // Asset filenames are content-hashed, so only the shell must stay fresh.
+      'cache-control': servedName === 'index.html' ? 'no-store' : 'public, max-age=3600',
       'x-content-type-options': 'nosniff',
     });
-    createReadStream(target).pipe(res);
+    res.end(asset.data);
   }
 
   const server = http.createServer((req, res) => {

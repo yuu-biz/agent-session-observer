@@ -38,8 +38,10 @@ These are enforced in code and covered by tests (`test/server.test.ts`,
   a cap on entries, and **symlinks and junctions are never followed** — so a
   link into `C:\` or a loop cannot turn a log scan into a whole-disk scan.
 - The home directory is never scanned recursively.
-- Static file serving resolves the path and re-checks that the result is inside
-  the bundled web directory, so `../` traversal cannot escape it.
+- Static requests are normalised before any backend sees them: traversal
+  segments, backslashes, drive and UNC prefixes, NUL bytes and undecodable
+  escapes are **rejected**, not sanitised. The on-disk backend additionally
+  re-checks the resolved path against the asset root.
 
 **Processes**
 

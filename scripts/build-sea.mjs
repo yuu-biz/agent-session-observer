@@ -8,12 +8,13 @@
  * binary this machine already trusts, and the output is reproducible from a
  * pinned Node version — which matters for a tool that reads private logs.
  *
- * The app is first bundled into one CommonJS file with esbuild (already present
- * as a transitive build dependency of Vite), because SEA cannot load a tree of
- * ES modules from disk.
+ * The app is first bundled into one CommonJS file with esbuild, because SEA
+ * cannot load a tree of ES modules from disk. The built UI is then embedded as
+ * SEA assets, so the resulting binary is genuinely self-contained: one file to
+ * copy, nothing beside it to keep in sync.
  */
 import { execFileSync } from 'node:child_process';
-import { copyFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -49,15 +50,42 @@ buildSync({
   logOverride: { 'empty-import-meta': 'silent' },
 });
 
+console.log('• collecting the UI assets to embed');
+const webDir = path.join(distDir, 'web');
+
+/** Every file under `dist/web`, keyed by the URL path it is served at. */
+function collectAssets(dir, prefix = '') {
+  const out = {};
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    const key = prefix ? `${prefix}/${entry.name}` : entry.name;
+    if (entry.isDirectory()) Object.assign(out, collectAssets(full, key));
+    else if (entry.isFile()) out[`web/${key}`] = full.replace(/\\/g, '/');
+  }
+  return out;
+}
+
+let assets;
+try {
+  assets = collectAssets(webDir);
+} catch {
+  throw new Error(`no built UI at ${webDir} — run "npm run build" first`);
+}
+if (!assets['web/index.html']) {
+  throw new Error(`no index.html under ${webDir} — run "npm run build" first`);
+}
+const assetBytes = Object.values(assets).reduce((sum, file) => sum + statSync(file).size, 0);
+console.log(`  ${Object.keys(assets).length} files, ${(assetBytes / 1024).toFixed(0)} KB`);
+
 console.log('• writing the SEA config');
-// Web assets are read from disk next to the executable, so the release archive
-// ships `dist/web/` alongside the binary rather than embedding megabytes of it.
 const seaConfig = {
   main: bundlePath.replace(/\\/g, '/'),
   output: path.join(buildDir, 'sea-prep.blob').replace(/\\/g, '/'),
   disableExperimentalSEAWarning: true,
   useSnapshot: false,
   useCodeCache: false,
+  // Embedding the UI is what makes the binary movable on its own.
+  assets,
 };
 const configPath = path.join(buildDir, 'sea-config.json');
 writeFileSync(configPath, JSON.stringify(seaConfig, null, 2), 'utf8');
@@ -96,4 +124,6 @@ run(process.execPath, injectArgs);
 
 console.log(`\n✓ ${exePath}`);
 console.log(`  node ${process.version}, agent-session-observer ${pkg.version}`);
-console.log('  ship this next to dist/web/ — the UI assets are read from disk.');
+console.log(
+  `  self-contained: the UI is embedded, ${(statSync(exePath).size / 1048576).toFixed(0)} MB total.`,
+);

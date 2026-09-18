@@ -31,7 +31,7 @@ No configuration to get started. No account. No network.
 
 Grab the archive for your platform from
 [**Releases**](https://github.com/yuu-biz/agent-session-observer/releases/latest),
-unpack it, and run the binary next to its `dist/` folder:
+unpack it, and run it:
 
 | Platform | Archive | Run |
 | --- | --- | --- |
@@ -39,8 +39,11 @@ unpack it, and run the binary next to its `dist/` folder:
 | macOS (Apple silicon) | `agent-session-observer-macos-arm64.tar.gz` | `./agent-session-observer` |
 | Linux | `agent-session-observer-linux-x64.tar.gz` | `./agent-session-observer` |
 
-Each archive ships a `.sha256` next to it. On macOS the binary is ad-hoc signed,
-so Gatekeeper will ask you to approve it the first time.
+**It is a single file.** The Node runtime and the whole dashboard are embedded
+in the binary, so you can drop it anywhere on your PATH and move it around
+freely — there is nothing beside it to keep in sync. Each archive ships a
+`.sha256`. On macOS the binary is ad-hoc signed, so Gatekeeper will ask you to
+approve it the first time.
 
 ### From source
 
@@ -207,7 +210,7 @@ npm run dev:web         # Vite dev server against a running API
 | `npm run typecheck` | `tsc --noEmit` for both the server and the web app |
 | `npm run lint` | ESLint (flat config) |
 | `npm run build` | compile the server and bundle the UI into `dist/` |
-| `npm run package:sea` | build the standalone executable for the current platform |
+| `npm run package:sea` | build the self-contained executable for the current platform |
 
 All test fixtures are synthetic. No real prompt, path, username, repository or
 credential is committed — see [`test/fixtures/README.md`](test/fixtures/README.md).
