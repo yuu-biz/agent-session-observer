@@ -17,6 +17,8 @@ import { copyFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'no
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { buildSync } from 'esbuild';
+
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const buildDir = path.join(root, 'build', 'sea');
 const distDir = path.join(root, 'dist');
@@ -33,18 +35,19 @@ mkdirSync(buildDir, { recursive: true });
 
 console.log('• bundling the server into a single CommonJS file');
 const bundlePath = path.join(buildDir, 'bundle.cjs');
-run(process.execPath, [
-  path.join(root, 'node_modules', 'esbuild', 'bin', 'esbuild'),
-  path.join(distDir, 'cli', 'sea-main.js'),
-  '--bundle',
-  '--platform=node',
-  '--format=cjs',
-  '--target=node20',
-  `--outfile=${bundlePath}`,
+// esbuild's JS API rather than its CLI: on Linux and macOS `bin/esbuild` is a
+// native binary, so shelling out to it through `node` does not work.
+buildSync({
+  entryPoints: [path.join(distDir, 'cli', 'sea-main.js')],
+  bundle: true,
+  platform: 'node',
+  format: 'cjs',
+  target: 'node20',
+  outfile: bundlePath,
   // `import.meta` does not exist in CommonJS output; the server detects that
   // and resolves its web assets relative to the executable instead.
-  '--log-override:empty-import-meta=silent',
-]);
+  logOverride: { 'empty-import-meta': 'silent' },
+});
 
 console.log('• writing the SEA config');
 // Web assets are read from disk next to the executable, so the release archive
