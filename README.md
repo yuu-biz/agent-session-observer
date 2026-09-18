@@ -90,6 +90,9 @@ Chromium) opened in app mode:
   of the way of your normal browsing and is what lets the app notice the window
   closing.
 
+Launching it again while it is already running opens another window onto the
+instance you have, rather than failing on a busy port.
+
 If no Chromium-based browser is found it falls back to a normal tab and says so.
 On Windows Edge is always present, so this is effectively guaranteed; on macOS
 Safari cannot do app mode, so install one of the above for the windowed

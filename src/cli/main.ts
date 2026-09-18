@@ -10,11 +10,17 @@ import {
   hideConsoleWindow,
   launchAppWindow,
 } from './app-window.js';
+import {
+  isAddressInUse,
+  probeRunningInstance,
+  watchWindow,
+  writeStartupError,
+} from './lifecycle.js';
 import { localTimeZoneName } from '../core/time.js';
 import { discoverRoots } from '../discovery/roots.js';
 import { startServer } from '../server/http.js';
 
-export const VERSION = '0.2.0';
+export const VERSION = '0.2.1';
 
 const HELP = `agent-session-observer ${VERSION}
 
@@ -175,7 +181,32 @@ export async function main(argv: readonly string[] = process.argv.slice(2)): Pro
     return;
   }
 
-  const handle = await startServer({ config, dev: args.dev, version: VERSION });
+  // A second launch must surface the app that is already running rather than
+  // dying on EADDRINUSE with no console to say why.
+  const existing = await probeRunningInstance(config.port);
+  if (existing) {
+    console.log(`agent-session-observer ${VERSION}`);
+    console.log(`  already running at ${existing.url}`);
+    openApp(args, existing.url);
+    return;
+  }
+
+  let handle;
+  try {
+    handle = await startServer({ config, dev: args.dev, version: VERSION });
+  } catch (err) {
+    if (isAddressInUse(err)) {
+      // Something else holds the configured port; take any free one instead of
+      // refusing to start.
+      handle = await startServer({ config: { ...config, port: 0 }, dev: args.dev, version: VERSION });
+      console.log(`port ${config.port} was busy; using ${handle.port}`);
+    } else {
+      const logPath = await writeStartupError(err);
+      console.error((err as Error).message);
+      if (logPath) console.error(`details written to ${logPath}`);
+      process.exit(1);
+    }
+  }
 
   const shutdown = (): void => {
     void handle.close().then(() => process.exit(0));
@@ -202,18 +233,30 @@ export async function main(argv: readonly string[] = process.argv.slice(2)): Pro
     // On a console build this hides the window; on the packaged GUI build there
     // is no console to hide and the call is a no-op.
     hideConsoleWindow();
-    const window = launchAppWindow(browser, handle.url, appProfileDir());
-    window.closed.then(
-      (userClosedIt) => {
-        if (userClosedIt) shutdown();
-      },
-      () => undefined,
-    );
+
+    // The UI's event stream is what tells us the window is gone; the browser
+    // process exiting does not, since browsers hand off and exit routinely.
+    const watch = watchWindow({ onClosed: shutdown });
+    handle.onClientsChanged = (count) => watch.update(count);
+    handle.onQuitRequested = () => {
+      watch.dispose();
+      shutdown();
+    };
+
+    launchAppWindow(browser, handle.url, appProfileDir());
     return;
   }
 
   console.log('  press Ctrl+C to stop');
   if (args.openMode !== 'none') openBrowser(handle.url);
+}
+
+/** Opens an already-running instance the way this launch asked for. */
+function openApp(args: { openMode: OpenMode }, url: string): void {
+  if (args.openMode === 'none') return;
+  const browser = args.openMode === 'app' ? findAppBrowser() : null;
+  if (browser) launchAppWindow(browser, url, appProfileDir());
+  else openBrowser(url);
 }
 
 /** True when this file was run as the entry point rather than imported. */

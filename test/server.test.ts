@@ -172,7 +172,7 @@ describe('api endpoints', () => {
       await new Promise((r) => setTimeout(r, 400));
       expect(calls).toBe(1);
     } finally {
-      delete server.onQuitRequested;
+      server.onQuitRequested = undefined;
     }
   });
 

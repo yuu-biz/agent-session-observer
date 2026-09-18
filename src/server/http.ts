@@ -57,10 +57,30 @@ export interface ServerHandle {
   scanner: SessionScanner;
   /** Set by the CLI so the UI can quit an app that has no console. */
   onQuitRequested?: () => void;
+  /**
+   * Called whenever the number of connected UI clients changes.
+   *
+   * This is how app-window mode knows the window was closed. Watching the
+   * browser process instead does not work: browsers routinely hand a URL to
+   * another process and exit immediately, so process lifetime says nothing
+   * about whether a window is open. A live event stream does.
+   */
+  onClientsChanged?: (count: number) => void;
 }
 
 interface SseClient {
   res: http.ServerResponse;
+}
+
+/**
+ * Callbacks the CLI installs after the server is up. They live in their own
+ * object so the request handlers can close over something that exists from the
+ * first line, rather than over a handle that is only created once `listen`
+ * reports a port.
+ */
+interface ServerHooks {
+  onQuitRequested?: (() => void) | undefined;
+  onClientsChanged?: ((count: number) => void) | undefined;
 }
 
 export interface StartServerOptions {
@@ -83,6 +103,7 @@ export async function startServer(options: StartServerOptions): Promise<ServerHa
   });
 
   const clients = new Set<SseClient>();
+  const hooks: ServerHooks = {};
   /**
    * The scan in flight, if any. `close()` awaits it: a scan writes the parse
    * cache, and a server that returns from `close()` while a write is still
@@ -140,7 +161,7 @@ export async function startServer(options: StartServerOptions): Promise<ServerHa
       config,
       version: options.version,
       localOnly: true,
-      canQuit: serverHandle?.onQuitRequested !== undefined,
+      canQuit: hooks.onQuitRequested !== undefined,
     };
   }
 
@@ -271,13 +292,14 @@ export async function startServer(options: StartServerOptions): Promise<ServerHa
       case 'POST /api/quit': {
         // The packaged app has no console, so closing it has to be possible
         // from the page itself. Only loopback, same-origin callers reach here.
-        if (!serverHandle.onQuitRequested) {
+        const onQuit = hooks.onQuitRequested;
+        if (!onQuit) {
           json(res, 501, { error: 'this process does not support quitting from the UI' });
           return;
         }
         json(res, 202, { quitting: true });
         // Let the response flush before tearing the server down.
-        setTimeout(() => serverHandle.onQuitRequested?.(), 150).unref?.();
+        setTimeout(() => onQuit(), 150).unref?.();
         return;
       }
 
@@ -303,6 +325,7 @@ export async function startServer(options: StartServerOptions): Promise<ServerHa
         res.write(`event: hello\ndata: ${JSON.stringify(statusPayload())}\n\n`);
         const client: SseClient = { res };
         clients.add(client);
+        hooks.onClientsChanged?.(clients.size);
         const keepAlive = setInterval(() => {
           try {
             res.write(': ping\n\n');
@@ -313,6 +336,7 @@ export async function startServer(options: StartServerOptions): Promise<ServerHa
         req.on('close', () => {
           clearInterval(keepAlive);
           clients.delete(client);
+          hooks.onClientsChanged?.(clients.size);
         });
         return;
       }
@@ -346,6 +370,18 @@ export async function startServer(options: StartServerOptions): Promise<ServerHa
     url: `http://127.0.0.1:${port}`,
     port,
     scanner,
+    get onQuitRequested() {
+      return hooks.onQuitRequested;
+    },
+    set onQuitRequested(fn) {
+      hooks.onQuitRequested = fn;
+    },
+    get onClientsChanged() {
+      return hooks.onClientsChanged;
+    },
+    set onClientsChanged(fn) {
+      hooks.onClientsChanged = fn;
+    },
     async close() {
       clearInterval(timer);
       for (const client of clients) client.res.end();
