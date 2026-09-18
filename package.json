@@ -1,0 +1,70 @@
+{
+  "name": "agent-session-observer",
+  "version": "0.1.0",
+  "description": "Local-only observability for Codex CLI and Claude Code sessions: auto-discovers session logs and shows daily activity, concurrency, and per-session timelines.",
+  "keywords": [
+    "codex",
+    "claude-code",
+    "observability",
+    "session",
+    "jsonl",
+    "local",
+    "developer-tools"
+  ],
+  "license": "MIT",
+  "author": "agent-session-observer contributors",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yuu-biz/agent-session-observer.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yuu-biz/agent-session-observer/issues"
+  },
+  "homepage": "https://github.com/yuu-biz/agent-session-observer#readme",
+  "type": "module",
+  "engines": {
+    "node": ">=20.11.0"
+  },
+  "bin": {
+    "agent-session-observer": "dist/cli/main.js",
+    "aso": "dist/cli/main.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "npm run build:server && npm run build:web",
+    "build:server": "tsc -p tsconfig.build.json",
+    "build:web": "vite build --config web/vite.config.ts",
+    "dev": "npm run build:server && node dist/cli/main.js --dev",
+    "dev:web": "vite --config web/vite.config.ts",
+    "start": "node dist/cli/main.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p web/tsconfig.json --noEmit",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "audit:deps": "npm audit --omit=dev",
+    "package:sea": "node scripts/build-sea.mjs",
+    "verify": "npm run lint && npm run typecheck && npm run test && npm run build"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@eslint/js": "^9.39.0",
+    "@types/node": "^22.20.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^5.1.0",
+    "eslint": "^9.39.0",
+    "globals": "^16.5.0",
+    "postject": "^1.0.0-alpha.6",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.46.0",
+    "vite": "^7.1.0",
+    "vitest": "^3.2.0"
+  }
+}
