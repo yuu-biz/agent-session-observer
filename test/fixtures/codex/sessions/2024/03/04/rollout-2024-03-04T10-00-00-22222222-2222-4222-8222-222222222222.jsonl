@@ -1,0 +1,10 @@
+{"timestamp": "2024-03-04T10:00:00.000Z", "type": "session_meta", "payload": {"session_id": "22222222-2222-4222-8222-222222222222", "id": "22222222-2222-4222-8222-222222222222", "cwd": "/tmp/legacy", "originator": "codex-tui", "cli_version": "0.115.0", "model_provider": "openai"}}
+{"timestamp": "2024-03-04T10:00:01.000Z", "type": "response_item", "payload": {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "Refactor the parser."}]}}
+{ this line is not valid json
+{"timestamp": "2024-03-04T10:00:03.000Z", "type": "response_item", "payload": {"type": "function_call", "name": "shell_command", "arguments": "{\"command\":\"ls -la\"}", "call_id": "call_1"}}
+{"timestamp": "2024-03-04T10:00:05.500Z", "type": "response_item", "payload": {"type": "function_call_output", "call_id": "call_1", "output": "Exit code: 0\nWall time: 2.5 seconds\nOutput:\nfile-a\nfile-b"}}
+{"timestamp": "2024-03-04T10:00:07.000Z", "type": "response_item", "payload": {"type": "custom_tool_call", "status": "completed", "call_id": "call_2", "name": "apply_patch", "input": "*** Begin Patch\n*** Add File: notes.md\n+hello\n*** End Patch"}}
+{"timestamp": "2024-03-04T10:00:07.400Z", "type": "response_item", "payload": {"type": "custom_tool_call_output", "call_id": "call_2", "output": "{\"output\":\"Success.\",\"metadata\":{\"exit_code\":0,\"duration_seconds\":0.4}}"}}
+{"timestamp": "2024-03-04T10:00:11.000Z", "type": "response_item", "payload": {"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": "Refactor complete."}]}}
+{"timestamp": "2024-03-04T10:00:12.000Z", "type": "unknown_future_record", "payload": {"type": "something_new", "value": 1}}
+{"timestamp":"2024-03-04T10:00:13.000Z","type":"response_i
