@@ -90,6 +90,21 @@ Violating any of these is a release blocker:
 - Prompt text may be displayed locally; it must never be logged to stdout,
   written outside the cache, or sent anywhere.
 
+## Interface language
+
+The UI ships English and Japanese. `web/src/lib/messages.ts` holds both tables
+and is deliberately free of React and of the DOM, so the test suite can import
+it directly.
+
+- English is the source of truth; every key must exist in both tables with the
+  same `{placeholders}`. `test/i18n.test.ts` enforces this, so a half-translated
+  string fails the build rather than appearing mid-sentence in the wrong
+  language.
+- Never concatenate translated fragments; add a key with placeholders instead.
+- Product names (Codex, Claude Code), normalized event kinds, and cost in USD
+  stay untranslated — they are identifiers, not prose.
+- CLI and server output stay English.
+
 ## Testing expectations
 
 - Every parser change needs a fixture. **Fixtures are 100% synthetic** — no real

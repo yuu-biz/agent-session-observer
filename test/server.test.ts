@@ -147,6 +147,35 @@ describe('api endpoints', () => {
     expect((await fetch(`${base}/api/does-not-exist`)).status).toBe(404);
   });
 
+  it('refuses to quit when nothing wired up a shutdown handler', async () => {
+    // The packaged app sets one; an embedded server like this test's must not
+    // be able to take the host process down.
+    const res = await fetch(`${base}/api/quit`, { method: 'POST' });
+    expect(res.status).toBe(501);
+    expect(((await (await fetch(`${base}/api/status`)).json()) as { canQuit: boolean }).canQuit).toBe(
+      false,
+    );
+  });
+
+  it('honours a wired-up quit request exactly once', async () => {
+    let calls = 0;
+    server.onQuitRequested = () => {
+      calls += 1;
+    };
+    try {
+      expect(((await (await fetch(`${base}/api/status`)).json()) as { canQuit: boolean }).canQuit).toBe(
+        true,
+      );
+      const res = await fetch(`${base}/api/quit`, { method: 'POST' });
+      expect(res.status).toBe(202);
+      // The handler fires after the response has flushed.
+      await new Promise((r) => setTimeout(r, 400));
+      expect(calls).toBe(1);
+    } finally {
+      delete server.onQuitRequested;
+    }
+  });
+
   it('serves the overview and comparison shapes the UI expects', async () => {
     const overview = (await (await fetch(`${base}/api/overview?days=7`)).json()) as {
       days: unknown[];
@@ -170,7 +199,7 @@ describe('api endpoints', () => {
 describe('cli argument parsing', () => {
   it('parses the documented flags', () => {
     const args = parseArgs(['--port', '9999', '--no-open', '--wsl', 'off']);
-    expect(args).toMatchObject({ port: 9999, open: false, wsl: 'off' });
+    expect(args).toMatchObject({ port: 9999, openMode: 'none', wsl: 'off' });
   });
 
   it('ignores an out-of-range port rather than crashing', () => {
@@ -182,23 +211,23 @@ describe('cli argument parsing', () => {
     expect(parseArgs(['--wsl', 'everything']).wsl).toBeUndefined();
   });
 
-  it('implies --no-open in dev mode', () => {
-    expect(parseArgs(['--dev'])).toMatchObject({ dev: true, open: false });
+  it('opens nothing in dev mode, whatever else was asked for', () => {
+    expect(parseArgs(['--dev'])).toMatchObject({ dev: true, openMode: 'none' });
+    expect(parseArgs(['--app', '--dev']).openMode).toBe('none');
   });
 
-  it('defaults to opening a browser', () => {
-    expect(parseArgs([]).open).toBe(true);
+  it('defaults to an app window, so double-clicking needs no flags', () => {
+    expect(parseArgs([]).openMode).toBe('app');
+  });
+
+  it('falls back to a plain tab on request', () => {
+    expect(parseArgs(['--tab']).openMode).toBe('tab');
+    // The old explicit flag still selects app mode for anyone who scripted it.
+    expect(parseArgs(['--tab', '--app']).openMode).toBe('app');
   });
 });
 
 describe('app window mode', () => {
-  it('is off unless asked for, and is incompatible with --dev', () => {
-    expect(parseArgs([]).app).toBe(false);
-    expect(parseArgs(['--app']).app).toBe(true);
-    // --dev serves the API only, so an app window would point at nothing.
-    expect(parseArgs(['--app', '--dev']).app).toBe(false);
-  });
-
   it('builds browser arguments that give a real window, not a delegated tab', () => {
     const args = appBrowserArgs('http://127.0.0.1:7781', '/tmp/profile');
     expect(args).toContain('--app=http://127.0.0.1:7781');

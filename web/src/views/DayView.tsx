@@ -6,7 +6,16 @@ import { SessionTable } from '../components/SessionTable';
 import { Timeline } from '../components/Timeline';
 import { Panel, Stat, Tiles } from '../components/Tiles';
 import { api } from '../lib/api';
-import { fmtClock, fmtCompact, fmtCost, fmtDuration, PROVIDER_LABEL, shiftDay, todayKey } from '../lib/format';
+import {
+  fmtClock,
+  fmtCompact,
+  fmtCost,
+  PROVIDER_LABEL,
+  shiftDay,
+  todayKey,
+  useFormat,
+} from '../lib/format';
+import { useI18n } from '../lib/i18n';
 
 export function DayView({
   dayKey,
@@ -21,6 +30,8 @@ export function DayView({
   onChangeDay: (day: string) => void;
   onPickSession: (key: string) => void;
 }): React.ReactElement {
+  const { t } = useI18n();
+  const f = useFormat();
   const [data, setData] = useState<DayResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
@@ -46,11 +57,11 @@ export function DayView({
   return (
     <>
       <Panel
-        title="Day"
+        title={t('day.title')}
         actions={
           <div className="controls">
             <button className="btn" onClick={() => onChangeDay(shiftDay(dayKey, -1))}>
-              ← prev
+              {t('day.prev')}
             </button>
             <input
               type="date"
@@ -59,10 +70,10 @@ export function DayView({
               onChange={(e) => e.target.value && onChangeDay(e.target.value)}
             />
             <button className="btn" onClick={() => onChangeDay(shiftDay(dayKey, 1))} disabled={dayKey >= todayKey()}>
-              next →
+              {t('day.next')}
             </button>
             <button className="btn" onClick={() => onChangeDay(todayKey())}>
-              today
+              {t('day.today')}
             </button>
           </div>
         }
@@ -70,62 +81,64 @@ export function DayView({
       >
         <Tiles>
           <Stat
-            label="Clock time active"
+            label={t('day.clockActive')}
             kind="estimate"
-            value={fmtDuration(summary?.clockActiveMs ?? 0)}
-            sub="≥1 agent running"
+            value={f.duration(summary?.clockActiveMs ?? 0)}
+            sub={t('day.clockActiveSub')}
           />
           <Stat
-            label="Agent time (sum)"
+            label={t('day.agentTime')}
             kind="estimate"
-            value={fmtDuration(summary?.agentActiveMs ?? 0)}
+            value={f.duration(summary?.agentActiveMs ?? 0)}
             sub={
               summary && summary.clockActiveMs > 0
-                ? `${(summary.agentActiveMs / summary.clockActiveMs).toFixed(2)}× parallel`
+                ? t('overview.parallel', {
+                    x: (summary.agentActiveMs / summary.clockActiveMs).toFixed(2),
+                  })
                 : '—'
             }
           />
           <Stat
-            label="Wall span covered"
-            value={fmtDuration(summary?.wallSpanMs ?? 0)}
+            label={t('day.wallSpan')}
+            value={f.duration(summary?.wallSpanMs ?? 0)}
             sub={
               summary?.firstActivityTs
                 ? `${fmtClock(summary.firstActivityTs)} – ${fmtClock(summary.lastActivityTs)}`
                 : '—'
             }
           />
-          <Stat label="Sessions" value={String(summary?.sessionCount ?? 0)} />
+          <Stat label={t('day.sessions')} value={String(summary?.sessionCount ?? 0)} />
           <Stat
-            label="Peak concurrency"
+            label={t('day.peak')}
             value={String(summary?.peakConcurrency ?? 0)}
-            sub={summary ? `avg ${summary.avgConcurrency.toFixed(2)} while active` : '—'}
+            sub={summary ? t('day.avgWhileActive', { avg: summary.avgConcurrency.toFixed(2) }) : '—'}
           />
-          <Stat label="Tool calls" value={fmtCompact(summary?.toolCalls ?? 0)} sub={`${summary?.userPrompts ?? 0} prompts`} />
+          <Stat label={t('day.colToolCalls')} value={fmtCompact(summary?.toolCalls ?? 0)} sub={t('overview.prompts', { n: summary?.userPrompts ?? 0 })} />
           <Stat
-            label="Cost"
+            label={t('day.colCost')}
             kind="measured"
-            value={summary?.hasCostData ? fmtCost(summary.costUsd) : 'n/a'}
+            value={summary?.hasCostData ? fmtCost(summary.costUsd) : t('common.na')}
           />
         </Tiles>
       </Panel>
 
-      {error && <div className="note warn">Failed to load day: {error}</div>}
+      {error && <div className="note warn">{t('day.loadFailed', { error })}</div>}
 
       <Panel
-        title="Timeline"
+        title={t('day.timeline')}
         actions={
           <div className="legend">
             <span>
               <i style={{ background: 'var(--border)' }} />
-              wall span
+              {t('day.legendWall')}
             </span>
             <span>
               <i style={{ background: 'var(--codex)' }} />
-              Codex active
+              {t('day.legendCodex')}
             </span>
             <span>
               <i style={{ background: 'var(--claude)' }} />
-              Claude Code active
+              {t('day.legendClaude')}
             </span>
           </div>
         }
@@ -144,25 +157,25 @@ export function DayView({
             now={Date.now()}
           />
         ) : (
-          <div className="empty">No sessions on this day.</div>
+          <div className="empty">{t('day.noSessions')}</div>
         )}
       </Panel>
 
       {summary && summary.msAtConcurrency.length > 0 && (
-        <Panel title="Time spent at each concurrency level">
+        <Panel title={t('day.concurrencyTable')}>
           <table className="grid" style={{ maxWidth: 480 }}>
             <thead>
               <tr>
-                <th className="num">Sessions active</th>
-                <th className="num">Clock time</th>
-                <th className="num">Share of active time</th>
+                <th className="num">{t('day.colSessionsActive')}</th>
+                <th className="num">{t('day.colClockTime')}</th>
+                <th className="num">{t('day.colShare')}</th>
               </tr>
             </thead>
             <tbody>
               {summary.msAtConcurrency.map((row) => (
                 <tr key={row.level}>
                   <td className="num">{row.level}</td>
-                  <td className="num">{fmtDuration(row.ms)}</td>
+                  <td className="num">{f.duration(row.ms)}</td>
                   <td className="num dim">
                     {summary.clockActiveMs > 0
                       ? `${((row.ms / summary.clockActiveMs) * 100).toFixed(0)}%`
@@ -176,17 +189,17 @@ export function DayView({
       )}
 
       {summary && summary.byProvider.length > 0 && (
-        <Panel title="By provider">
+        <Panel title={t('day.byProvider')}>
           <table className="grid" style={{ maxWidth: 800 }}>
             <thead>
               <tr>
-                <th>Provider</th>
-                <th className="num">Sessions</th>
-                <th className="num">Agent time</th>
-                <th className="num">Clock time</th>
-                <th className="num">Prompts</th>
-                <th className="num">Tool calls</th>
-                <th className="num">Cost</th>
+                <th>{t('table.provider')}</th>
+                <th className="num">{t('day.sessions')}</th>
+                <th className="num">{t('day.colAgentTime')}</th>
+                <th className="num">{t('day.colClockTime')}</th>
+                <th className="num">{t('day.colPrompts')}</th>
+                <th className="num">{t('day.colToolCalls')}</th>
+                <th className="num">{t('day.colCost')}</th>
               </tr>
             </thead>
             <tbody>
@@ -196,11 +209,11 @@ export function DayView({
                     <span className={`badge ${p.provider}`}>{PROVIDER_LABEL[p.provider]}</span>
                   </td>
                   <td className="num">{p.sessionCount}</td>
-                  <td className="num">{fmtDuration(p.agentActiveMs)}</td>
-                  <td className="num dim">{fmtDuration(p.clockActiveMs)}</td>
+                  <td className="num">{f.duration(p.agentActiveMs)}</td>
+                  <td className="num dim">{f.duration(p.clockActiveMs)}</td>
                   <td className="num">{p.userPrompts}</td>
                   <td className="num">{p.toolCalls}</td>
-                  <td className="num dim">{p.costUsd == null ? 'n/a' : fmtCost(p.costUsd)}</td>
+                  <td className="num dim">{p.costUsd == null ? t('common.na') : fmtCost(p.costUsd)}</td>
                 </tr>
               ))}
             </tbody>
@@ -208,7 +221,7 @@ export function DayView({
         </Panel>
       )}
 
-      <Panel title={`Sessions (${data?.sessions.length ?? 0})`} flush>
+      <Panel title={t('day.sessionsTitle', { n: data?.sessions.length ?? 0 })} flush>
         <SessionTable
           sessions={data?.sessions ?? []}
           selectedKey={selected}

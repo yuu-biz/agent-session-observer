@@ -3,15 +3,29 @@ import { useEffect, useState } from 'react';
 
 import { Panel } from '../components/Tiles';
 import { api } from '../lib/api';
-import { fmtCompact, fmtCost, fmtDuration, tokenTotal } from '../lib/format';
+import { fmtCompact, fmtCost, tokenTotal, useFormat } from '../lib/format';
+import { useI18n, type MessageKey } from '../lib/i18n';
 
 /**
  * Provider comparison.
  *
- * The `unavailable` column is the honest part of this screen: a metric a
+ * The "does not record" section is the honest part of this screen: a metric a
  * provider never writes down shows as "not recorded", never as zero, so Codex
  * does not look free just because it does not report cost.
  */
+
+/**
+ * The server sends its limitation list in English; the UI maps it onto
+ * translated strings so the page reads in one language. Anything unmapped falls
+ * through verbatim rather than disappearing.
+ */
+const LIMIT_KEYS: Record<string, MessageKey> = {
+  'cost in USD': 'compare.limit.codex.cost',
+  'per-session runtime marker (liveness is inferred from log recency)':
+    'compare.limit.codex.marker',
+  'per-turn time-to-first-token': 'compare.limit.claude.ttft',
+};
+
 export function CompareView({
   days,
   refreshToken,
@@ -19,6 +33,8 @@ export function CompareView({
   days: number;
   refreshToken: number;
 }): React.ReactElement {
+  const { t } = useI18n();
+  const f = useFormat();
   const [rows, setRows] = useState<ProviderComparison[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -33,8 +49,8 @@ export function CompareView({
     };
   }, [days, refreshToken]);
 
-  if (error) return <div className="note warn">Failed to load comparison: {error}</div>;
-  if (!rows) return <div className="empty">Loading…</div>;
+  if (error) return <div className="note warn">{t('compare.loadFailed', { error })}</div>;
+  if (!rows) return <div className="empty">{t('common.loading')}</div>;
 
   const metric = (
     label: string,
@@ -51,13 +67,15 @@ export function CompareView({
     </tr>
   );
 
+  const notRecorded = <span className="faint">{t('common.notRecorded')}</span>;
+
   return (
     <>
-      <Panel title={`Codex vs Claude Code — last ${days} days`} flush>
+      <Panel title={t('compare.title', { n: days })} flush>
         <table className="grid">
           <thead>
             <tr>
-              <th>Metric</th>
+              <th>{t('compare.metric')}</th>
               {rows.map((r) => (
                 <th key={r.provider} className="num">
                   <span className={`badge ${r.provider}`}>{r.displayName}</span>
@@ -66,38 +84,37 @@ export function CompareView({
             </tr>
           </thead>
           <tbody>
-            {metric('Sessions', (r) => r.sessionCount)}
+            {metric(t('compare.sessions'), (r) => r.sessionCount)}
             {metric(
-              'Agent time (sum, est.)',
-              (r) => fmtDuration(r.agentActiveMs),
-              'Sum of this provider’s active segments.',
+              t('compare.agentTime'),
+              (r) => f.duration(r.agentActiveMs),
+              t('compare.agentTimeTitle'),
             )}
             {metric(
-              'Clock time (est.)',
-              (r) => fmtDuration(r.clockActiveMs),
-              'Wall-clock time with at least one session of this provider active.',
+              t('compare.clockTime'),
+              (r) => f.duration(r.clockActiveMs),
+              t('compare.clockTimeTitle'),
             )}
-            {metric('User prompts', (r) => r.userPrompts)}
-            {metric('Tool calls', (r) => fmtCompact(r.toolCalls))}
-            {metric('Tokens (in+out)', (r) => fmtCompact(tokenTotal(r.tokens)))}
-            {metric('Cache read tokens', (r) => fmtCompact(r.tokens.cacheRead ?? 0))}
+            {metric(t('compare.prompts'), (r) => r.userPrompts)}
+            {metric(t('compare.toolCalls'), (r) => fmtCompact(r.toolCalls))}
+            {metric(t('compare.tokens'), (r) => fmtCompact(tokenTotal(r.tokens)))}
+            {metric(t('compare.cacheRead'), (r) => fmtCompact(r.tokens.cacheRead ?? 0))}
             {metric(
-              'API time (measured)',
-              (r) => (r.measuredApiMs === undefined ? <span className="faint">not recorded</span> : fmtDuration(r.measuredApiMs)),
-              'Reported by the provider itself, not estimated.',
+              t('compare.apiTime'),
+              (r) => (r.measuredApiMs === undefined ? notRecorded : f.duration(r.measuredApiMs)),
+              t('compare.apiTimeTitle'),
             )}
-            {metric(
-              'Tool time (measured)',
-              (r) => (r.measuredToolMs === undefined ? <span className="faint">not recorded</span> : fmtDuration(r.measuredToolMs)),
+            {metric(t('compare.toolTime'), (r) =>
+              r.measuredToolMs === undefined ? notRecorded : f.duration(r.measuredToolMs),
             )}
-            {metric('Cost (measured)', (r) =>
-              r.costUsd === undefined ? <span className="faint">not recorded</span> : fmtCost(r.costUsd),
+            {metric(t('compare.cost'), (r) =>
+              r.costUsd === undefined ? notRecorded : fmtCost(r.costUsd),
             )}
           </tbody>
         </table>
       </Panel>
 
-      <Panel title="What each provider does not record">
+      <Panel title={t('compare.unavailable')}>
         <div className="split">
           {rows.map((r) => (
             <div key={r.provider}>
@@ -106,7 +123,7 @@ export function CompareView({
               </div>
               <ul className="dim" style={{ margin: 0, paddingLeft: 18 }}>
                 {r.unavailable.map((u) => (
-                  <li key={u}>{u}</li>
+                  <li key={u}>{LIMIT_KEYS[u] ? t(LIMIT_KEYS[u]) : u}</li>
                 ))}
               </ul>
             </div>
@@ -114,11 +131,7 @@ export function CompareView({
         </div>
       </Panel>
 
-      <div className="note">
-        Totals are not directly comparable as a measure of “which agent works harder”: the two CLIs
-        log at different granularities, and active time is estimated from event density. Treat this
-        as a view of your own usage mix, not a benchmark.
-      </div>
+      <div className="note">{t('compare.note')}</div>
     </>
   );
 }

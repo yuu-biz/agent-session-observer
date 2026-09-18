@@ -1,7 +1,8 @@
 import type { DailySummary } from '@core/aggregate';
 import { useState } from 'react';
 
-import { fmtDuration, PROVIDER_LABEL, weekdayShort } from '../lib/format';
+import { PROVIDER_LABEL, useFormat } from '../lib/format';
+import { useI18n } from '../lib/i18n';
 
 /**
  * Daily agent-time bars, stacked by provider, with a dashed marker for
@@ -21,6 +22,8 @@ export function DailyBars({
   selected?: string;
   onSelect?: (dayKey: string) => void;
 }): React.ReactElement {
+  const { t } = useI18n();
+  const f = useFormat();
   const [hover, setHover] = useState<{ x: number; y: number; day: DailySummary } | null>(null);
   const max = Math.max(1, ...days.map((d) => Math.max(d.agentActiveMs, d.clockActiveMs)));
 
@@ -59,7 +62,7 @@ export function DailyBars({
       <div className="bar-labels">
         {days.map((d) => (
           <div key={d.dayKey} title={d.dayKey}>
-            {days.length <= 10 ? weekdayShort(d.dayKey) : d.dayKey.slice(8)}
+            {days.length <= 10 ? f.weekday(d.dayKey) : d.dayKey.slice(8)}
           </div>
         ))}
       </div>
@@ -67,20 +70,21 @@ export function DailyBars({
       {hover && (
         <div className="tooltip" style={{ left: hover.x, top: hover.y }}>
           <div className="t-title">
-            {hover.day.dayKey} · {weekdayShort(hover.day.dayKey)}
+            {hover.day.dayKey} · {f.weekday(hover.day.dayKey)}
           </div>
           <div className="dim">
-            agent time (sum) <strong>{fmtDuration(hover.day.agentActiveMs)}</strong>
+            {t('day.agentTime')} <strong>{f.duration(hover.day.agentActiveMs)}</strong>
           </div>
           <div className="dim">
-            clock time (≥1 active) <strong>{fmtDuration(hover.day.clockActiveMs)}</strong>
+            {t('overview.legendClock')} <strong>{f.duration(hover.day.clockActiveMs)}</strong>
           </div>
           <div className="dim">
-            {hover.day.sessionCount} sessions · peak concurrency {hover.day.peakConcurrency}
+            {t('shell.sessions', { n: hover.day.sessionCount })} · {t('day.peak')}{' '}
+            {hover.day.peakConcurrency}
           </div>
           {hover.day.byProvider.map((p) => (
             <div key={p.provider} className="faint">
-              {PROVIDER_LABEL[p.provider]}: {fmtDuration(p.agentActiveMs)} ({p.sessionCount})
+              {PROVIDER_LABEL[p.provider]}: {f.duration(p.agentActiveMs)} ({p.sessionCount})
             </div>
           ))}
         </div>

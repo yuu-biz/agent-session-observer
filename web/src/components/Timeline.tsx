@@ -1,7 +1,8 @@
 import type { SessionLane } from '@api/api';
 import { useMemo, useRef, useState } from 'react';
 
-import { fmtClock, fmtDuration, PROVIDER_LABEL } from '../lib/format';
+import { fmtClock, PROVIDER_LABEL, useFormat } from '../lib/format';
+import { useI18n } from '../lib/i18n';
 
 /**
  * Day timeline.
@@ -43,6 +44,8 @@ interface TooltipState {
 
 export function Timeline(props: TimelineProps): React.ReactElement {
   const { dayStart, dayEnd, sessions, concurrencySteps } = props;
+  const { t } = useI18n();
+  const f = useFormat();
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
 
@@ -139,9 +142,9 @@ export function Timeline(props: TimelineProps): React.ReactElement {
           const wall = s.dayWallSpan;
           const tipLines = [
             `${PROVIDER_LABEL[s.provider]} · ${s.host.label}`,
-            `wall span ${fmtClock(s.startedAt)}–${fmtClock(s.endedAt)} (${fmtDuration(s.wallSpanMs)})`,
-            `active (est.) ${fmtDuration(s.activity.activeMs)} · idle ${fmtDuration(s.activity.idleMs)}`,
-            `${s.counters.userPrompts} prompts · ${s.counters.toolCalls} tool calls`,
+            `${t('day.legendWall')} ${fmtClock(s.startedAt)}–${fmtClock(s.endedAt)} (${f.duration(s.wallSpanMs)})`,
+            `${t('table.active')} ${f.duration(s.activity.activeMs)} · ${t('table.idle')} ${f.duration(s.activity.idleMs)}`,
+            `${t('table.prompts')} ${s.counters.userPrompts} · ${t('table.tools')} ${s.counters.toolCalls}`,
           ];
           return (
             <g
@@ -187,8 +190,15 @@ export function Timeline(props: TimelineProps): React.ReactElement {
 
         {/* concurrency strip */}
         {concPath && <path className="conc-area" d={concPath} />}
-        <text className="hour-label" x={2} y={AXIS_H + lanesH + 12}>
-          concurrency (peak {maxConc})
+        {/* Anchored right: activity usually starts at the left, and a label
+            sitting on top of the very data it describes is worse than none. */}
+        <text
+          className="hour-label"
+          x={width - 4}
+          y={AXIS_H + lanesH + 12}
+          textAnchor="end"
+        >
+          {t('day.peak')}: {maxConc}
         </text>
 
         {props.now !== undefined && props.now >= dayStart && props.now <= dayEnd && (

@@ -39,11 +39,13 @@ unpack it, and run it:
 | macOS (Apple silicon) | `agent-session-observer-macos-arm64.tar.gz` | `./agent-session-observer` |
 | Linux | `agent-session-observer-linux-x64.tar.gz` | `./agent-session-observer` |
 
-**It is a single file.** The Node runtime and the whole dashboard are embedded
-in the binary, so you can drop it anywhere on your PATH and move it around
-freely — there is nothing beside it to keep in sync. Each archive ships a
-`.sha256`. On macOS the binary is ad-hoc signed, so Gatekeeper will ask you to
-approve it the first time.
+**One file, double-click, done.** The Node runtime and the whole dashboard are
+embedded in the binary, and on Windows it carries no console window — it just
+opens as an app. There is no shortcut to edit and no flag to remember. Drop it
+anywhere and move it around freely; nothing sits beside it to keep in sync.
+
+Each archive ships a `.sha256`. On macOS the binary is ad-hoc signed, so
+Gatekeeper will ask you to approve it the first time.
 
 ### From source
 
@@ -62,33 +64,41 @@ Either way it starts a local server on `http://127.0.0.1:7781` and opens your
 browser.
 
 ```
-agent-session-observer --app         # open as a desktop app window (see below)
+agent-session-observer --tab         # a normal browser tab instead of an app window
 agent-session-observer --doctor      # print what was auto-discovered, then exit
 agent-session-observer --port 8080   # use a different port
-agent-session-observer --no-open     # don't launch a browser
+agent-session-observer --no-open     # start the server without opening anything
 agent-session-observer --wsl off     # skip WSL scanning entirely
 ```
 
 > Running from source? Use `node dist/cli/main.js <flags>`.
+>
+> The packaged Windows build has no console, so command-line output only appears
+> when you redirect it: `agent-session-observer --doctor > report.txt`. The
+> **Sources** screen shows the same information.
 
-### App window mode
+### How the app window works
 
-`--app` makes it behave like a desktop application rather than a browser tab,
-without shipping a second browser engine:
+There is no second browser engine in the download. The app window is the
+Chromium-based browser you already have (Edge, Chrome, Brave, Vivaldi,
+Chromium) opened in app mode:
 
-- it opens in a window with **no tab strip and no address bar**, using the
-  Chromium-based browser you already have (Edge, Chrome, Brave, Vivaldi,
-  Chromium);
-- on Windows the **console window is hidden**, so nothing sits behind the app;
-- **closing the window quits the app**, server included.
+- a window with **no tab strip and no address bar**;
+- **closing the window quits the app**, server included — or use **quit** in the
+  top bar;
+- its own browser profile under `~/.agent-session-observer/`, which keeps it out
+  of the way of your normal browsing and is what lets the app notice the window
+  closing.
 
-The window uses its own browser profile under `~/.agent-session-observer/`, so
-it stays out of the way of your normal browsing — and so that closing it is
-something the app can actually detect. If no Chromium-based browser is found it
-falls back to opening a normal tab and says so.
+If no Chromium-based browser is found it falls back to a normal tab and says so.
+On Windows Edge is always present, so this is effectively guaranteed; on macOS
+Safari cannot do app mode, so install one of the above for the windowed
+experience.
 
-On Windows, the usual setup is a shortcut to the executable with `--app`
-appended to its target.
+### Language
+
+English and Japanese, switched from the top bar. The first run follows your
+browser's language; after that the choice is remembered locally.
 
 ## Auto discovery
 

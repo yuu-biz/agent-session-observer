@@ -26,6 +26,8 @@ export const api = {
   comparison: (days: number) => get<ProviderComparison[]>(`/api/comparison?days=${days}`),
   session: (key: string) => get<SessionDetail>(`/api/session?key=${encodeURIComponent(key)}`),
   rescan: () => fetch('/api/rescan', { method: 'POST' }),
+  /** Asks the packaged app to shut itself down. No-op for an embedded server. */
+  quit: () => fetch('/api/quit', { method: 'POST' }),
   saveConfig: async (config: AppConfig): Promise<AppConfig> => {
     const res = await fetch('/api/config', {
       method: 'PUT',

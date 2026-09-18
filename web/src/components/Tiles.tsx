@@ -1,5 +1,7 @@
 import type React from 'react';
 
+import { useI18n } from '../lib/i18n';
+
 /**
  * Stat tiles.
  *
@@ -19,12 +21,13 @@ export interface StatProps {
 }
 
 export function Stat({ label, value, sub, kind = 'fact', title }: StatProps): React.ReactElement {
+  const { t } = useI18n();
   return (
     <div className={`tile ${kind}`} title={title}>
       <div className="label">
         {label}
-        {kind === 'estimate' && <span className="badge est">est.</span>}
-        {kind === 'measured' && <span className="badge measured">measured</span>}
+        {kind === 'estimate' && <span className="badge est">{t('common.est')}</span>}
+        {kind === 'measured' && <span className="badge measured">{t('common.measured')}</span>}
       </div>
       <div className="value">{value}</div>
       {sub && <div className="sub">{sub}</div>}

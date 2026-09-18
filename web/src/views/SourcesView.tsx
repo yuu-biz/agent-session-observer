@@ -5,7 +5,8 @@ import { useEffect, useState } from 'react';
 
 import { Panel } from '../components/Tiles';
 import { api } from '../lib/api';
-import { fmtDuration, PROVIDER_LABEL } from '../lib/format';
+import { PROVIDER_LABEL, useFormat } from '../lib/format';
+import { useI18n } from '../lib/i18n';
 
 /**
  * Sources & settings.
@@ -22,6 +23,8 @@ export function SourcesView({
   status: StatusResponse | null;
   onConfigSaved: () => void;
 }): React.ReactElement {
+  const { t } = useI18n();
+  const f = useFormat();
   const [draft, setDraft] = useState<AppConfig | null>(null);
   const [saving, setSaving] = useState(false);
   const [newRoot, setNewRoot] = useState({ provider: 'codex' as ProviderId, path: '' });
@@ -30,7 +33,7 @@ export function SourcesView({
     if (status && !draft) setDraft(status.config);
   }, [status, draft]);
 
-  if (!status || !draft) return <div className="empty">Loading…</div>;
+  if (!status || !draft) return <div className="empty">{t('common.loading')}</div>;
 
   const save = async (next: AppConfig): Promise<void> => {
     setSaving(true);
@@ -45,20 +48,17 @@ export function SourcesView({
 
   return (
     <>
-      <Panel title="Discovered sources" flush>
+      <Panel title={t('sources.discovered')} flush>
         {status.roots.length === 0 ? (
-          <div className="empty">
-            Nothing found automatically. Add a directory below — it should be the provider home
-            (the folder that contains <code>sessions/</code> or <code>projects/</code>).
-          </div>
+          <div className="empty">{t('sources.empty')}</div>
         ) : (
           <table className="grid">
             <thead>
               <tr>
-                <th>Provider</th>
-                <th>Host</th>
-                <th>Path</th>
-                <th>Found via</th>
+                <th>{t('table.provider')}</th>
+                <th>{t('table.host')}</th>
+                <th>{t('sources.colPath')}</th>
+                <th>{t('sources.colFoundVia')}</th>
               </tr>
             </thead>
             <tbody>
@@ -80,7 +80,7 @@ export function SourcesView({
       </Panel>
 
       {status.notes.length > 0 && (
-        <Panel title="Discovery notes">
+        <Panel title={t('sources.notes')}>
           <div style={{ display: 'grid', gap: 6 }}>
             {status.notes.map((n, i) => (
               <div key={i} className="note">
@@ -91,14 +91,13 @@ export function SourcesView({
         </Panel>
       )}
 
-      <Panel title="Analysis settings">
+      <Panel title={t('sources.analysis')}>
         <div style={{ display: 'grid', gap: 14, maxWidth: 640 }}>
           <label style={{ display: 'grid', gap: 4 }}>
             <span>
-              <strong>Idle threshold</strong>{' '}
+              <strong>{t('sources.idleThreshold')}</strong>{' '}
               <span className="dim">
-                — a gap longer than this splits a session into separate active segments. Current:{' '}
-                {fmtDuration(draft.idleThresholdMs)}
+                — {t('sources.idleThresholdHelp', { value: f.duration(draft.idleThresholdMs) })}
               </span>
             </span>
             <input
@@ -112,14 +111,13 @@ export function SourcesView({
               onTouchEnd={() => void save(draft)}
             />
             <span className="faint" style={{ fontSize: 11 }}>
-              Raising it counts short pauses as work; lowering it counts only tightly packed
-              activity. Every “active”, “idle” and concurrency figure in the app follows this value.
+              {t('sources.idleThresholdNote')}
             </span>
           </label>
 
           <label style={{ display: 'grid', gap: 4 }}>
             <span>
-              <strong>WSL scanning</strong>
+              <strong>{t('sources.wsl')}</strong>
             </span>
             <select
               value={draft.wslMode}
@@ -129,19 +127,19 @@ export function SourcesView({
                 void save(next);
               }}
             >
-              <option value="running">Running distributions only (recommended)</option>
-              <option value="all">All distributions — will start stopped ones</option>
-              <option value="off">Do not scan WSL</option>
+              <option value="running">{t('sources.wslRunning')}</option>
+              <option value="all">{t('sources.wslAll')}</option>
+              <option value="off">{t('sources.wslOff')}</option>
             </select>
             <span className="faint" style={{ fontSize: 11 }}>
-              Reading a path inside a stopped distribution boots it. The default avoids that side
-              effect and simply reports which distributions were skipped.
+              {t('sources.wslNote')}
             </span>
           </label>
 
           <label style={{ display: 'grid', gap: 4 }}>
             <span>
-              <strong>History window</strong> <span className="dim">days of logs loaded</span>
+              <strong>{t('sources.lookback')}</strong>{' '}
+              <span className="dim">{t('sources.lookbackHelp')}</span>
             </span>
             <input
               type="number"
@@ -156,10 +154,9 @@ export function SourcesView({
         </div>
       </Panel>
 
-      <Panel title="Additional log directories">
+      <Panel title={t('sources.extra')}>
         <p className="dim" style={{ marginTop: 0 }}>
-          Only needed when auto discovery misses a location — for example a custom{' '}
-          <code>CODEX_HOME</code> on another drive. Point at the provider home directory.
+          {t('sources.extraHelp')}
         </p>
         {draft.extraRoots.length > 0 && (
           <table className="grid" style={{ marginBottom: 10 }}>
@@ -182,7 +179,7 @@ export function SourcesView({
                         void save(next);
                       }}
                     >
-                      remove
+                      {t('sources.remove')}
                     </button>
                   </td>
                 </tr>
@@ -195,8 +192,8 @@ export function SourcesView({
             value={newRoot.provider}
             onChange={(e) => setNewRoot({ ...newRoot, provider: e.target.value as ProviderId })}
           >
-            <option value="codex">Codex</option>
-            <option value="claude-code">Claude Code</option>
+            <option value="codex">{t('common.codex')}</option>
+            <option value="claude-code">{t('common.claudeCode')}</option>
           </select>
           <input
             type="text"
@@ -218,13 +215,13 @@ export function SourcesView({
               void save(next);
             }}
           >
-            add
+            {t('sources.add')}
           </button>
         </div>
       </Panel>
 
       {status.warnings.length > 0 && (
-        <Panel title={`Scan warnings (${status.warnings.length})`}>
+        <Panel title={t('sources.warnings', { n: status.warnings.length })}>
           <div className="scroll-y" style={{ maxHeight: 240, display: 'grid', gap: 4 }}>
             {status.warnings.map((w, i) => (
               <div key={i} className="mono faint" style={{ fontSize: 11 }}>
@@ -235,22 +232,13 @@ export function SourcesView({
         </Panel>
       )}
 
-      <Panel title="Privacy">
+      <Panel title={t('sources.privacy')}>
         <ul className="dim" style={{ margin: 0, paddingLeft: 18 }}>
-          <li>Every log file is opened read-only. Nothing in your Codex or Claude Code directories is modified.</li>
-          <li>No telemetry, no analytics, no update checks, no outbound network requests at all.</li>
-          <li>
-            The server listens on 127.0.0.1 only, rejects non-loopback <code>Host</code> headers, and
-            rejects cross-origin requests.
-          </li>
-          <li>
-            Prompt text is rendered in this UI because it is your own log content on your own
-            machine. It is never transmitted anywhere.
-          </li>
-          <li>
-            A parse cache lives in <code className="mono">~/.agent-session-observer/</code>. Deleting
-            it is always safe.
-          </li>
+          <li>{t('sources.privacy1')}</li>
+          <li>{t('sources.privacy2')}</li>
+          <li>{t('sources.privacy3')}</li>
+          <li>{t('sources.privacy4')}</li>
+          <li>{t('sources.privacy5')}</li>
         </ul>
       </Panel>
     </>

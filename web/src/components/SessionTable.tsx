@@ -2,14 +2,14 @@ import type { SessionSummary } from '@core/types';
 
 import {
   fmtClock,
-  fmtCost,
   fmtCompact,
-  fmtDuration,
-  LIVE_LABEL,
+  fmtCost,
   PROVIDER_LABEL,
   shortPath,
   tokenTotal,
+  useFormat,
 } from '../lib/format';
+import { useI18n, type MessageKey } from '../lib/i18n';
 
 /**
  * Session list.
@@ -29,8 +29,11 @@ export function SessionTable({
   selectedKey?: string | null;
   showDate?: boolean;
 }): React.ReactElement {
+  const { t } = useI18n();
+  const f = useFormat();
+
   if (sessions.length === 0) {
-    return <div className="empty">No sessions in this range.</div>;
+    return <div className="empty">{t('table.empty')}</div>;
   }
 
   return (
@@ -39,47 +42,35 @@ export function SessionTable({
         <thead>
           <tr>
             <th style={{ width: 26 }} />
-            <th>Session</th>
-            <th style={{ width: 110 }}>Provider</th>
-            <th style={{ width: 100 }}>Host</th>
+            <th>{t('table.session')}</th>
+            <th style={{ width: 110 }}>{t('table.provider')}</th>
+            <th style={{ width: 100 }}>{t('table.host')}</th>
             <th className="num" style={{ width: 62 }}>
-              Start
-            </th>
-            <th className="num" style={{ width: 62 }}>
-              End
-            </th>
-            <th className="num" style={{ width: 72 }} title="Last event minus first event">
-              Wall
-            </th>
-            <th
-              className="num"
-              style={{ width: 92 }}
-              title="Sum of active segments (estimate, lower bound)"
-            >
-              Active (est.)
-            </th>
-            <th className="num" style={{ width: 72 }}>
-              Idle
-            </th>
-            <th className="num" style={{ width: 72 }}>
-              Prompts
+              {t('table.start')}
             </th>
             <th className="num" style={{ width: 62 }}>
-              Tools
+              {t('table.end')}
             </th>
-            <th
-              className="num"
-              style={{ width: 76 }}
-              title="Input + output tokens reported in the log"
-            >
-              Tokens
+            <th className="num" style={{ width: 78 }} title={t('table.wallTitle')}>
+              {t('table.wall')}
             </th>
-            <th
-              className="num"
-              style={{ width: 78 }}
-              title="Only providers that record cost report a value"
-            >
-              Cost
+            <th className="num" style={{ width: 100 }} title={t('table.activeTitle')}>
+              {t('table.active')}
+            </th>
+            <th className="num" style={{ width: 82 }}>
+              {t('table.idle')}
+            </th>
+            <th className="num" style={{ width: 78 }}>
+              {t('table.prompts')}
+            </th>
+            <th className="num" style={{ width: 66 }}>
+              {t('table.tools')}
+            </th>
+            <th className="num" style={{ width: 80 }} title={t('table.tokensTitle')}>
+              {t('table.tokens')}
+            </th>
+            <th className="num" style={{ width: 82 }} title={t('table.costTitle')}>
+              {t('table.cost')}
             </th>
           </tr>
         </thead>
@@ -90,10 +81,16 @@ export function SessionTable({
               className="clickable"
               onClick={() => onSelect(s.key)}
               style={
-                selectedKey === s.key ? { outline: '1px solid var(--accent)', outlineOffset: -1 } : undefined
+                selectedKey === s.key
+                  ? { outline: '1px solid var(--accent)', outlineOffset: -1 }
+                  : undefined
               }
             >
-              <td title={`${LIVE_LABEL[s.live.status]} (${s.live.confidence} confidence)`}>
+              <td
+                title={`${t(`live.${s.live.status}` as MessageKey)} · ${t('overview.confidence', {
+                  level: t(`live.${s.live.confidence}` as MessageKey),
+                })}`}
+              >
                 <span className={`dot ${s.live.status}`} />
               </td>
               <td>
@@ -113,17 +110,21 @@ export function SessionTable({
                 {s.host.label}
               </td>
               <td className="num">
-                {showDate && <span className="faint">{new Date(s.startedAt).toLocaleDateString()} </span>}
+                {showDate && (
+                  <span className="faint">
+                    {new Date(s.startedAt).toLocaleDateString(f.locale)}{' '}
+                  </span>
+                )}
                 {fmtClock(s.startedAt)}
               </td>
               <td className="num">{fmtClock(s.endedAt)}</td>
-              <td className="num dim">{fmtDuration(s.wallSpanMs)}</td>
-              <td className="num">{fmtDuration(s.activity.activeMs)}</td>
-              <td className="num faint">{fmtDuration(s.activity.idleMs)}</td>
+              <td className="num dim">{f.duration(s.wallSpanMs)}</td>
+              <td className="num">{f.duration(s.activity.activeMs)}</td>
+              <td className="num faint">{f.duration(s.activity.idleMs)}</td>
               <td className="num">{s.counters.userPrompts}</td>
               <td className="num">{s.counters.toolCalls}</td>
               <td className="num dim">{fmtCompact(tokenTotal(s.tokens))}</td>
-              <td className="num dim">{s.costUsd == null ? 'n/a' : fmtCost(s.costUsd)}</td>
+              <td className="num dim">{s.costUsd == null ? t('common.na') : fmtCost(s.costUsd)}</td>
             </tr>
           ))}
         </tbody>

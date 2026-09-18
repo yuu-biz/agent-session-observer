@@ -38,6 +38,8 @@ export interface StatusResponse {
   version: string;
   /** Always true. Stated explicitly so the UI can show it. */
   localOnly: true;
+  /** True when this process can shut itself down on request from the page. */
+  canQuit: boolean;
 }
 
 export interface SessionLane extends SessionSummary {

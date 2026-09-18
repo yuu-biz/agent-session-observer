@@ -7,14 +7,11 @@ import {
   fmtClockSec,
   fmtCompact,
   fmtCost,
-  fmtDateTime,
-  fmtDuration,
-  fmtDurationPrecise,
-  fmtNumber,
-  LIVE_LABEL,
   PROVIDER_LABEL,
   tokenTotal,
+  useFormat,
 } from '../lib/format';
+import { useI18n, type MessageKey } from '../lib/i18n';
 
 const KIND_ORDER = [
   'user_prompt',
@@ -38,6 +35,8 @@ export function SessionView({
   sessionKey: string;
   onBack: () => void;
 }): React.ReactElement {
+  const { t } = useI18n();
+  const f = useFormat();
   const [detail, setDetail] = useState<SessionDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
@@ -80,14 +79,14 @@ export function SessionView({
   if (error) {
     return (
       <div className="note warn">
-        Failed to load session: {error}{' '}
+        {t('session.loadFailed', { error })}{' '}
         <button className="btn" onClick={onBack}>
-          back
+          {t('common.back')}
         </button>
       </div>
     );
   }
-  if (!detail) return <div className="empty">Loading session…</div>;
+  if (!detail) return <div className="empty">{t('session.loading')}</div>;
 
   const measured = detail.measured;
   const hasMeasured =
@@ -96,10 +95,10 @@ export function SessionView({
   return (
     <>
       <Panel
-        title="Session"
+        title={t('session.title')}
         actions={
           <button className="btn" onClick={onBack}>
-            ← back
+            {t('common.back')}
           </button>
         }
         flush
@@ -108,110 +107,116 @@ export function SessionView({
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <span className={`badge ${detail.provider}`}>{PROVIDER_LABEL[detail.provider]}</span>
             <span className="badge">{detail.host.label}</span>
-            {detail.isSubagent && <span className="badge">subagent{detail.agentLabel ? `: ${detail.agentLabel}` : ''}</span>}
+            {detail.isSubagent && (
+              <span className="badge">
+                {t('session.subagent')}
+                {detail.agentLabel ? `: ${detail.agentLabel}` : ''}
+              </span>
+            )}
             <span className={`dot ${detail.live.status}`} />
             <span className="dim">
-              {LIVE_LABEL[detail.live.status]} ({detail.live.confidence} confidence)
+              {t(`live.${detail.live.status}` as MessageKey)} ·{' '}
+              {t('overview.confidence', {
+                level: t(`live.${detail.live.confidence}` as MessageKey),
+              })}
             </span>
           </div>
           <h3 style={{ margin: '8px 0 6px', fontSize: 15, overflowWrap: 'anywhere' }}>
             {detail.title ?? detail.sessionId}
           </h3>
           <dl className="kv">
-            <dt>session id</dt>
+            <dt>{t('session.id')}</dt>
             <dd className="mono">{detail.sessionId}</dd>
-            <dt>working dir</dt>
+            <dt>{t('session.cwd')}</dt>
             <dd className="mono">{detail.cwd ?? '—'}</dd>
             {detail.gitBranch && (
               <>
-                <dt>git branch</dt>
+                <dt>{t('session.branch')}</dt>
                 <dd className="mono">{detail.gitBranch}</dd>
               </>
             )}
-            <dt>models</dt>
+            <dt>{t('session.models')}</dt>
             <dd className="mono">{detail.models.length > 0 ? detail.models.join(', ') : '—'}</dd>
-            <dt>cli version</dt>
+            <dt>{t('session.cliVersion')}</dt>
             <dd className="mono">{detail.cliVersion ?? '—'}</dd>
-            <dt>started</dt>
-            <dd className="mono">{fmtDateTime(detail.startedAt)}</dd>
-            <dt>last event</dt>
-            <dd className="mono">{fmtDateTime(detail.endedAt)}</dd>
-            <dt>log file</dt>
+            <dt>{t('session.started')}</dt>
+            <dd className="mono">{f.dateTime(detail.startedAt)}</dd>
+            <dt>{t('session.lastEvent')}</dt>
+            <dd className="mono">{f.dateTime(detail.endedAt)}</dd>
+            <dt>{t('session.logFile')}</dt>
             <dd className="mono faint" style={{ fontSize: 11 }}>
               {detail.filePath}
             </dd>
-            <dt>evidence</dt>
+            <dt>{t('session.evidence')}</dt>
             <dd className="faint">{detail.live.evidence.join(' · ')}</dd>
           </dl>
         </div>
 
         <Tiles>
           <Stat
-            label="Wall span"
-            value={fmtDuration(detail.wallSpanMs)}
-            sub="first event → last event"
-            title="A fact about the log: the time between the first and last recorded event."
+            label={t('session.wallSpan')}
+            value={f.duration(detail.wallSpanMs)}
+            sub={t('session.wallSpanSub')}
+            title={t('session.wallSpanTitle')}
           />
           <Stat
-            label="Active"
+            label={t('session.active')}
             kind="estimate"
-            value={fmtDuration(detail.activity.activeMs)}
-            sub={`${detail.activity.segments.length} segments`}
-            title={`Sum of activity segments, split at gaps longer than ${Math.round(
-              detail.activity.idleThresholdMs / 60000,
-            )} minutes. A lower bound, not model compute time.`}
+            value={f.duration(detail.activity.activeMs)}
+            sub={t('session.activeSub', { n: detail.activity.segments.length })}
+            title={t('session.activeTitle', {
+              minutes: Math.round(detail.activity.idleThresholdMs / 60000),
+            })}
           />
           <Stat
-            label="Idle"
+            label={t('session.idle')}
             kind="estimate"
-            value={fmtDuration(detail.activity.idleMs)}
-            sub={`${detail.activity.idleGaps.length} gaps`}
+            value={f.duration(detail.activity.idleMs)}
+            sub={t('session.idleSub', { n: detail.activity.idleGaps.length })}
           />
           <Stat
-            label="API time"
+            label={t('session.apiTime')}
             kind="measured"
-            value={measured.apiMs !== undefined ? fmtDuration(measured.apiMs) : 'n/a'}
-            sub={measured.apiMs !== undefined ? measured.source : 'not recorded for this session'}
+            value={measured.apiMs !== undefined ? f.duration(measured.apiMs) : t('common.na')}
+            sub={measured.apiMs !== undefined ? measured.source : t('session.apiTimeNone')}
             title={measured.source}
           />
           <Stat
-            label="Tool time"
+            label={t('session.toolTime')}
             kind="measured"
-            value={measured.toolMs !== undefined ? fmtDuration(measured.toolMs) : 'n/a'}
-            sub={measured.toolMs !== undefined ? 'reported by provider' : 'not recorded'}
+            value={measured.toolMs !== undefined ? f.duration(measured.toolMs) : t('common.na')}
+            sub={measured.toolMs !== undefined ? t('session.toolTimeSub') : t('common.notRecorded')}
           />
           <Stat
-            label="Cost"
+            label={t('session.cost')}
             kind="measured"
-            value={detail.costUsd == null ? 'n/a' : fmtCost(detail.costUsd)}
+            value={detail.costUsd == null ? t('common.na') : fmtCost(detail.costUsd)}
           />
         </Tiles>
 
         <Tiles>
-          <Stat label="Prompts" value={String(detail.counters.userPrompts)} />
-          <Stat label="Tool calls" value={String(detail.counters.toolCalls)} />
-          <Stat label="Assistant messages" value={String(detail.counters.assistantMessages)} />
-          <Stat label="Errors" value={String(detail.counters.errors)} />
-          <Stat label="Compactions" value={String(detail.counters.compactions)} />
+          <Stat label={t('session.prompts')} value={String(detail.counters.userPrompts)} />
+          <Stat label={t('session.toolCalls')} value={String(detail.counters.toolCalls)} />
           <Stat
-            label="Tokens (in+out)"
+            label={t('session.assistantMessages')}
+            value={String(detail.counters.assistantMessages)}
+          />
+          <Stat label={t('session.errors')} value={String(detail.counters.errors)} />
+          <Stat label={t('session.compactions')} value={String(detail.counters.compactions)} />
+          <Stat
+            label={t('session.tokens')}
             value={fmtCompact(tokenTotal(detail.tokens))}
-            sub={`cache read ${fmtCompact(detail.tokens.cacheRead ?? 0)}`}
+            sub={t('session.cacheRead', { n: fmtCompact(detail.tokens.cacheRead ?? 0) })}
           />
         </Tiles>
       </Panel>
 
-      {!hasMeasured && (
-        <div className="note">
-          This provider did not record API or tool timings for this session, so only estimates are
-          shown. Nothing here is inferred from anything other than event timestamps in the log.
-        </div>
-      )}
+      {!hasMeasured && <div className="note">{t('session.noMeasured')}</div>}
 
       <div className="split">
-        <Panel title={`Phases (${detail.phases.length})`}>
+        <Panel title={t('session.phases', { n: detail.phases.length })}>
           {detail.phases.length === 0 ? (
-            <div className="empty">No phases.</div>
+            <div className="empty">{t('session.noPhases')}</div>
           ) : (
             <div className="scroll-y" style={{ maxHeight: 420 }}>
               {detail.phases.map((p) => (
@@ -222,7 +227,8 @@ export function SessionView({
                   </div>
                   <div className="meta">
                     {fmtClockSec(p.startTs)} → {fmtClockSec(p.endTs)} ·{' '}
-                    {fmtDuration(p.endTs - p.startTs)} · {p.toolCalls} tool calls
+                    {f.duration(p.endTs - p.startTs)} ·{' '}
+                    {t('session.phaseMeta', { toolCalls: p.toolCalls })}
                     {tokenTotal(p.tokens) > 0 ? ` · ${fmtCompact(tokenTotal(p.tokens))} tok` : ''}
                   </div>
                 </div>
@@ -231,16 +237,16 @@ export function SessionView({
           )}
         </Panel>
 
-        <Panel title={`Idle gaps (${detail.activity.idleGaps.length})`}>
+        <Panel title={t('session.idleGaps', { n: detail.activity.idleGaps.length })}>
           {detail.activity.idleGaps.length === 0 ? (
-            <div className="empty">No gap longer than the idle threshold.</div>
+            <div className="empty">{t('session.noIdleGaps')}</div>
           ) : (
             <table className="grid">
               <thead>
                 <tr>
-                  <th className="num">From</th>
-                  <th className="num">To</th>
-                  <th className="num">Duration</th>
+                  <th className="num">{t('session.gapFrom')}</th>
+                  <th className="num">{t('session.gapTo')}</th>
+                  <th className="num">{t('session.gapDuration')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -248,7 +254,7 @@ export function SessionView({
                   <tr key={i}>
                     <td className="num">{fmtClockSec(g.start)}</td>
                     <td className="num">{fmtClockSec(g.end)}</td>
-                    <td className="num">{fmtDuration(g.durationMs)}</td>
+                    <td className="num">{f.duration(g.durationMs)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -258,18 +264,18 @@ export function SessionView({
       </div>
 
       <Panel
-        title={`Events (${filtered.length} of ${detail.events.length})`}
+        title={t('session.events', { shown: filtered.length, total: detail.events.length })}
         actions={
           <div className="controls">
             <input
               type="text"
-              placeholder="search events…"
+              placeholder={t('session.search')}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               style={{ minWidth: 200 }}
             />
             <button className="btn" onClick={() => setShowRaw((v) => !v)}>
-              {showRaw ? 'hide raw fields' : 'show raw fields'}
+              {showRaw ? t('session.hideRaw') : t('session.showRaw')}
             </button>
           </div>
         }
@@ -282,7 +288,9 @@ export function SessionView({
                 key={k}
                 className="btn"
                 aria-pressed={kinds.has(k)}
-                style={kinds.has(k) ? { borderColor: 'var(--accent)', color: 'var(--accent)' } : undefined}
+                style={
+                  kinds.has(k) ? { borderColor: 'var(--accent)', color: 'var(--accent)' } : undefined
+                }
                 onClick={() =>
                   setKinds((prev) => {
                     const next = new Set(prev);
@@ -297,7 +305,7 @@ export function SessionView({
             ))}
             {kinds.size > 0 && (
               <button className="btn" onClick={() => setKinds(new Set())}>
-                clear
+                {t('common.clear')}
               </button>
             )}
           </div>
@@ -305,27 +313,22 @@ export function SessionView({
 
         {detail.eventsTruncated && (
           <div className="note warn" style={{ margin: '0 12px 8px' }}>
-            This session has more events than the viewer displays; the list is truncated.
+            {t('session.truncated')}
           </div>
         )}
 
         <div className="scroll-y" style={{ maxHeight: 620 }}>
           {filtered.slice(0, 5000).map((e, i) => (
-            <EventRow key={i} event={e} showRaw={showRaw} />
+            <EventRow key={i} event={e} showRaw={showRaw} format={f} />
           ))}
-          {filtered.length > 5000 && (
-            <div className="empty">Showing the first 5000 matching events. Narrow the search.</div>
-          )}
+          {filtered.length > 5000 && <div className="empty">{t('session.tooMany')}</div>}
         </div>
       </Panel>
 
-      <div className="note">
-        Prompt and tool text shown here is read from your local log files and never leaves this
-        machine. This page makes no network requests other than to this app on 127.0.0.1.
-      </div>
+      <div className="note">{t('session.privacyNote')}</div>
 
       {detail.providerMeta && Object.keys(detail.providerMeta).length > 0 && (
-        <Panel title="Provider metadata">
+        <Panel title={t('session.providerMeta')}>
           <pre
             className="mono"
             style={{ margin: 0, fontSize: 11, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}
@@ -338,7 +341,19 @@ export function SessionView({
   );
 }
 
-function EventRow({ event, showRaw }: { event: NormalizedEvent; showRaw: boolean }): React.ReactElement {
+/**
+ * Event kinds stay untranslated on purpose: they are the normalized model's own
+ * vocabulary, and the same words appear in the API, the logs and the docs.
+ */
+function EventRow({
+  event,
+  showRaw,
+  format,
+}: {
+  event: NormalizedEvent;
+  showRaw: boolean;
+  format: ReturnType<typeof useFormat>;
+}): React.ReactElement {
   const label = event.toolName ? `${event.kind} · ${event.toolName}` : event.kind;
   return (
     <div className="evt">
@@ -361,14 +376,14 @@ function EventRow({ event, showRaw }: { event: NormalizedEvent; showRaw: boolean
         )}
       </div>
       <div className="mono faint" style={{ fontSize: 11, whiteSpace: 'nowrap' }}>
-        {event.durationMs !== undefined && fmtDurationPrecise(event.durationMs)}
+        {event.durationMs !== undefined && format.durationPrecise(event.durationMs)}
         {event.exitCode !== undefined && (
           <span style={{ color: event.exitCode === 0 ? 'var(--ok)' : 'var(--danger)' }}>
             {' '}
             exit {event.exitCode}
           </span>
         )}
-        {event.tokens?.total !== undefined && ` ${fmtNumber(event.tokens.total)} tok`}
+        {event.tokens?.total !== undefined && ` ${format.number(event.tokens.total)} tok`}
       </div>
     </div>
   );

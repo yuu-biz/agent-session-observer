@@ -1,6 +1,6 @@
 {
   "name": "agent-session-observer",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Local-only observability for Codex CLI and Claude Code sessions: auto-discovers session logs and shows daily activity, concurrency, and per-session timelines.",
   "keywords": [
     "codex",

@@ -14,7 +14,7 @@ import { localTimeZoneName } from '../core/time.js';
 import { discoverRoots } from '../discovery/roots.js';
 import { startServer } from '../server/http.js';
 
-export const VERSION = '0.1.2';
+export const VERSION = '0.2.0';
 
 const HELP = `agent-session-observer ${VERSION}
 
@@ -23,12 +23,13 @@ Local-only dashboard for Codex CLI and Claude Code session activity.
 Usage:
   agent-session-observer [options]
 
+By default it opens as an app window: no tab strip, no address bar, and
+closing the window quits. Just run it - there is nothing to configure.
+
 Options:
-  --app             Open in a standalone app window instead of a browser tab.
-                    Uses the Chromium browser you already have, hides the
-                    console on Windows, and exits when the window is closed.
+  --tab             Open an ordinary browser tab instead of an app window
   --port <n>        Port to listen on (default 7781, 0 for any free port)
-  --no-open         Do not open a browser
+  --no-open         Start the server without opening anything
   --doctor          Print what was auto-discovered and exit
   --wsl <mode>      running | all | off   (default: running)
   --dev             Serve the API only; use the Vite dev server for the UI
@@ -39,10 +40,16 @@ Everything stays on this machine: no telemetry, no network calls, and the
 server listens on 127.0.0.1 only.
 `;
 
+/** How the dashboard should be presented once the server is up. */
+export type OpenMode = 'app' | 'tab' | 'none';
+
 interface CliArgs {
   port?: number;
-  open: boolean;
-  app: boolean;
+  /**
+   * `app` is the default so that double-clicking the executable is the whole
+   * setup story: no shortcut to edit, no flag to remember.
+   */
+  openMode: OpenMode;
   doctor: boolean;
   dev: boolean;
   wsl?: AppConfig['wslMode'];
@@ -52,8 +59,7 @@ interface CliArgs {
 
 export function parseArgs(argv: readonly string[]): CliArgs {
   const args: CliArgs = {
-    open: true,
-    app: false,
+    openMode: 'app',
     doctor: false,
     dev: false,
     help: false,
@@ -69,18 +75,21 @@ export function parseArgs(argv: readonly string[]): CliArgs {
         break;
       }
       case '--no-open':
-        args.open = false;
+        args.openMode = 'none';
+        break;
+      case '--tab':
+        args.openMode = 'tab';
         break;
       case '--app':
-        args.app = true;
+        // Kept for anyone who scripted it before it became the default.
+        args.openMode = 'app';
         break;
       case '--doctor':
         args.doctor = true;
         break;
       case '--dev':
         args.dev = true;
-        args.open = false;
-        args.app = false;
+        args.openMode = 'none';
         break;
       case '--wsl': {
         const value = argv[i + 1];
@@ -173,22 +182,25 @@ export async function main(argv: readonly string[] = process.argv.slice(2)): Pro
   };
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
+  // The packaged build has no console, so Ctrl+C is not available; the Quit
+  // button in the UI is what replaces it.
+  handle.onQuitRequested = shutdown;
 
-  const browser = args.app ? findAppBrowser() : null;
+  const browser = args.openMode === 'app' ? findAppBrowser() : null;
 
   console.log(`agent-session-observer ${VERSION}`);
   console.log(`  ${handle.url}`);
   console.log('  local only — no telemetry, no outbound requests');
 
-  if (args.app && !browser) {
-    console.log('  no Chromium-based browser found for --app; opening a normal tab instead');
+  if (args.openMode === 'app' && !browser) {
+    console.log('  no Chromium-based browser found; opening a normal tab instead');
   }
 
   if (browser) {
     console.log(`  app window via ${browser}`);
-    console.log('  close the window to stop');
-    // Hidden first so the console flashes for as little time as possible; the
-    // lines above are still written for anyone capturing stdout to a pipe.
+    console.log('  close the window to quit');
+    // On a console build this hides the window; on the packaged GUI build there
+    // is no console to hide and the call is a no-op.
     hideConsoleWindow();
     const window = launchAppWindow(browser, handle.url, appProfileDir());
     window.closed.then(
@@ -201,7 +213,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2)): Pro
   }
 
   console.log('  press Ctrl+C to stop');
-  if (args.open) openBrowser(handle.url);
+  if (args.openMode !== 'none') openBrowser(handle.url);
 }
 
 /** True when this file was run as the entry point rather than imported. */

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { api, subscribe } from './lib/api';
 import { todayKey } from './lib/format';
+import { useI18n, type Lang, type MessageKey } from './lib/i18n';
 import { CompareView } from './views/CompareView';
 import { DayView } from './views/DayView';
 import { Overview } from './views/Overview';
@@ -12,7 +13,15 @@ import { SourcesView } from './views/SourcesView';
 
 type Tab = 'overview' | 'day' | 'compare' | 'sources';
 
+const TABS: Array<[Tab, MessageKey]> = [
+  ['overview', 'nav.overview'],
+  ['day', 'nav.daily'],
+  ['compare', 'nav.compare'],
+  ['sources', 'nav.sources'],
+];
+
 export function App(): React.ReactElement {
+  const { t, lang, setLang } = useI18n();
   const [tab, setTab] = useState<Tab>('overview');
   const [status, setStatus] = useState<StatusResponse | null>(null);
   const [provider, setProvider] = useState<ProviderId | 'all'>('all');
@@ -20,6 +29,7 @@ export function App(): React.ReactElement {
   const [dayKey, setDayKey] = useState(todayKey());
   const [sessionKey, setSessionKey] = useState<string | null>(null);
   const [refreshToken, setRefreshToken] = useState(0);
+  const [quit, setQuit] = useState(false);
 
   const refresh = useCallback(() => setRefreshToken((n) => n + 1), []);
 
@@ -63,6 +73,25 @@ export function App(): React.ReactElement {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  // The packaged app has no console, so quitting has to be possible from here.
+  const onQuit = (): void => {
+    if (!window.confirm(t('shell.quitConfirm'))) return;
+    setQuit(true);
+    void api.quit();
+  };
+
+  if (quit) {
+    return (
+      <div className="app">
+        <main className="main">
+          <div className="empty" style={{ paddingTop: 80 }}>
+            {t('shell.quitDone')}
+          </div>
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="app">
       <header className="topbar">
@@ -72,14 +101,7 @@ export function App(): React.ReactElement {
         </div>
 
         <nav className="nav">
-          {(
-            [
-              ['overview', 'Overview'],
-              ['day', 'Daily'],
-              ['compare', 'Compare'],
-              ['sources', 'Sources'],
-            ] as Array<[Tab, string]>
-          ).map(([id, label]) => (
+          {TABS.map(([id, key]) => (
             <button
               key={id}
               aria-current={tab === id && !sessionKey}
@@ -88,7 +110,7 @@ export function App(): React.ReactElement {
                 setSessionKey(null);
               }}
             >
-              {label}
+              {t(key)}
             </button>
           ))}
         </nav>
@@ -97,7 +119,7 @@ export function App(): React.ReactElement {
           <div className="seg">
             {[1, 7, 14, 30].map((d) => (
               <button key={d} aria-pressed={days === d} onClick={() => setDays(d)}>
-                {d}d
+                {t('common.days', { n: d })}
               </button>
             ))}
           </div>
@@ -107,31 +129,45 @@ export function App(): React.ReactElement {
           <div className="seg">
             {(
               [
-                ['all', 'All'],
-                ['codex', 'Codex'],
-                ['claude-code', 'Claude Code'],
-              ] as Array<[ProviderId | 'all', string]>
-            ).map(([id, label]) => (
+                ['all', 'common.all'],
+                ['codex', 'common.codex'],
+                ['claude-code', 'common.claudeCode'],
+              ] as Array<[ProviderId | 'all', MessageKey]>
+            ).map(([id, key]) => (
               <button key={id} aria-pressed={provider === id} onClick={() => setProvider(id)}>
-                {label}
+                {t(key)}
               </button>
             ))}
           </div>
         )}
 
         <div className="topbar-right">
-          <span className="privacy-banner" title="No telemetry. No outbound network requests.">
-            🔒 local only
+          <span className="privacy-banner" title={t('shell.localOnlyTitle')}>
+            🔒 {t('shell.localOnly')}
           </span>
+
           {scanning ? (
             <span className="dim">
-              <span className="spin" /> scanning {progress?.filesDone ?? 0}/{progress?.filesTotal ?? 0}
+              <span className="spin" />{' '}
+              {t('shell.scanning', {
+                done: progress?.filesDone ?? 0,
+                total: progress?.filesTotal ?? 0,
+              })}
             </span>
           ) : (
             <span className="dim">
-              {status?.sessionCount ?? 0} sessions · {status?.timezone ?? ''}
+              {t('shell.sessions', { n: status?.sessionCount ?? 0 })} · {status?.timezone ?? ''}
             </span>
           )}
+
+          <div className="seg" title={t('shell.language')}>
+            {(['en', 'ja'] as Lang[]).map((l) => (
+              <button key={l} aria-pressed={lang === l} onClick={() => setLang(l)}>
+                {l === 'en' ? 'EN' : '日本語'}
+              </button>
+            ))}
+          </div>
+
           <button
             className="btn"
             onClick={() => {
@@ -139,8 +175,14 @@ export function App(): React.ReactElement {
             }}
             disabled={scanning}
           >
-            rescan
+            {t('shell.rescan')}
           </button>
+
+          {status?.canQuit && (
+            <button className="btn" onClick={onQuit} title={t('shell.quitTitle')}>
+              {t('shell.quit')}
+            </button>
+          )}
         </div>
       </header>
 
@@ -152,10 +194,7 @@ export function App(): React.ReactElement {
 
       <main className="main">
         {status && status.roots.length === 0 && !scanning && (
-          <div className="note warn">
-            No Codex or Claude Code data directories were found on this machine. Open{' '}
-            <strong>Sources</strong> to add one manually.
-          </div>
+          <div className="note warn">{t('shell.noRoots')}</div>
         )}
 
         {sessionKey ? (

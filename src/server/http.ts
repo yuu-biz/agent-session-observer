@@ -55,6 +55,8 @@ export interface ServerHandle {
   port: number;
   close(): Promise<void>;
   scanner: SessionScanner;
+  /** Set by the CLI so the UI can quit an app that has no console. */
+  onQuitRequested?: () => void;
 }
 
 interface SseClient {
@@ -138,6 +140,7 @@ export async function startServer(options: StartServerOptions): Promise<ServerHa
       config,
       version: options.version,
       localOnly: true,
+      canQuit: serverHandle?.onQuitRequested !== undefined,
     };
   }
 
@@ -265,6 +268,19 @@ export async function startServer(options: StartServerOptions): Promise<ServerHa
         json(res, 202, { started: true });
         return;
 
+      case 'POST /api/quit': {
+        // The packaged app has no console, so closing it has to be possible
+        // from the page itself. Only loopback, same-origin callers reach here.
+        if (!serverHandle.onQuitRequested) {
+          json(res, 501, { error: 'this process does not support quitting from the UI' });
+          return;
+        }
+        json(res, 202, { quitting: true });
+        // Let the response flush before tearing the server down.
+        setTimeout(() => serverHandle.onQuitRequested?.(), 150).unref?.();
+        return;
+      }
+
       case 'PUT /api/config': {
         const body = await readBody(req);
         const next = normalizeConfig(JSON.parse(body));
@@ -326,7 +342,7 @@ export async function startServer(options: StartServerOptions): Promise<ServerHa
 
   startScan();
 
-  return {
+  const serverHandle: ServerHandle = {
     url: `http://127.0.0.1:${port}`,
     port,
     scanner,
@@ -339,6 +355,8 @@ export async function startServer(options: StartServerOptions): Promise<ServerHa
       await inFlight?.catch(() => undefined);
     },
   };
+
+  return serverHandle;
 }
 
 export async function loadServerConfig(): Promise<AppConfig> {
