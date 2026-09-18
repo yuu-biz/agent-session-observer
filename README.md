@@ -1,5 +1,9 @@
 # Agent Session Observer
 
+[![CI](https://github.com/yuu-biz/agent-session-observer/actions/workflows/ci.yml/badge.svg)](https://github.com/yuu-biz/agent-session-observer/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/yuu-biz/agent-session-observer)](https://github.com/yuu-biz/agent-session-observer/releases/latest)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 Local-only observability for **Codex CLI** and **Claude Code**.
 
 It finds the session logs those tools already write on your machine, and turns
@@ -8,12 +12,6 @@ agents were running, how many ran at once, and what happened inside each
 session.
 
 No configuration to get started. No account. No network.
-
-```
-npx agent-session-observer
-```
-
-<!-- screenshots live in docs/ once published -->
 
 ---
 
@@ -29,22 +27,36 @@ npx agent-session-observer
 
 ## Install
 
-Requires **Node.js 20.11+**. Nothing else.
+### Download a build (no Node required)
+
+Grab the archive for your platform from
+[**Releases**](https://github.com/yuu-biz/agent-session-observer/releases/latest),
+unpack it, and run the binary next to its `dist/` folder:
+
+| Platform | Archive | Run |
+| --- | --- | --- |
+| Windows | `agent-session-observer-windows-x64.zip` | `agent-session-observer.exe` |
+| macOS (Apple silicon) | `agent-session-observer-macos-arm64.tar.gz` | `./agent-session-observer` |
+| Linux | `agent-session-observer-linux-x64.tar.gz` | `./agent-session-observer` |
+
+Each archive ships a `.sha256` next to it. On macOS the binary is ad-hoc signed,
+so Gatekeeper will ask you to approve it the first time.
+
+### From source
+
+Requires **Node.js 20.11+**, and nothing else — there are no runtime
+dependencies to install.
 
 ```bash
-# run it without installing
-npx agent-session-observer
-
-# or install it
-npm install -g agent-session-observer
-agent-session-observer
+git clone https://github.com/yuu-biz/agent-session-observer.git
+cd agent-session-observer
+npm install
+npm run build
+npm start
 ```
 
-On Windows you can also download the standalone `.exe` from
-[Releases](https://github.com/yuu-biz/agent-session-observer/releases) — no Node
-install required. Unzip it and run it.
-
-It starts a local server on `http://127.0.0.1:7781` and opens your browser.
+Either way it starts a local server on `http://127.0.0.1:7781` and opens your
+browser.
 
 ```
 agent-session-observer --doctor      # print what was auto-discovered, then exit
@@ -52,6 +64,8 @@ agent-session-observer --port 8080   # use a different port
 agent-session-observer --no-open     # don't launch a browser
 agent-session-observer --wsl off     # skip WSL scanning entirely
 ```
+
+> Running from source? Use `node dist/cli/main.js <flags>`.
 
 ## Auto discovery
 
@@ -193,7 +207,7 @@ npm run dev:web         # Vite dev server against a running API
 | `npm run typecheck` | `tsc --noEmit` for both the server and the web app |
 | `npm run lint` | ESLint (flat config) |
 | `npm run build` | compile the server and bundle the UI into `dist/` |
-| `npm run package:sea` | build the standalone Windows executable |
+| `npm run package:sea` | build the standalone executable for the current platform |
 
 All test fixtures are synthetic. No real prompt, path, username, repository or
 credential is committed — see [`test/fixtures/README.md`](test/fixtures/README.md).
@@ -218,6 +232,7 @@ Contributions are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md) and
   update.
 - Sessions are bucketed into days by your **local** timezone, and a session that
   crosses midnight is split across both days.
+- **Not published to npm yet.** Install from a Release archive or from source.
 
 ## License
 
