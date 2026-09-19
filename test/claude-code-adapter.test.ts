@@ -68,6 +68,21 @@ describe('claude code adapter: session parsing', () => {
     expect(parsed?.measured.totalMs).toBe(2_725_000);
   });
 
+  it('carries the per-model dollars cost-state recorded, and only those', async () => {
+    const parsed = await claudeCodeAdapter.parseFile({ filePath: SESSION, root });
+    expect(parsed?.costByModel).toEqual({ 'demo-claude-1': 1.0, 'demo-claude-2': 0.2345 });
+  });
+
+  it('attributes token usage to the model on each assistant message', async () => {
+    const parsed = await claudeCodeAdapter.parseFile({ filePath: SESSION, root });
+    const models = Object.keys(parsed?.tokensByModel ?? {}).sort();
+    expect(models).toEqual(['demo-claude-1', 'demo-claude-2']);
+    // Every labelled bucket has to add back up to the session total, or the
+    // cost table and the token table would disagree with each other.
+    const summed = models.reduce((n, m) => n + (parsed?.tokensByModel[m]?.output ?? 0), 0);
+    expect(summed).toBe(parsed?.tokens.output);
+  });
+
   it('sums token usage across assistant messages', async () => {
     const parsed = await claudeCodeAdapter.parseFile({ filePath: SESSION, root });
     expect(parsed?.tokens.input).toBe(10 + 5 + 2 + 3);

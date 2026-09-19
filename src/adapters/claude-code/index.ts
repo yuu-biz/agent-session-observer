@@ -66,6 +66,9 @@ interface ClaudeState {
   cliVersion?: string;
   models: Set<string>;
   tokens: TokenUsage;
+  tokensByModel: Record<string, TokenUsage>;
+  /** Per-model dollars from `cost-state.modelUsage`, when Claude Code wrote them. */
+  costByModel: Record<string, number>;
   events: NormalizedEvent[];
   costUsd?: number;
   apiMs?: number;
@@ -176,7 +179,14 @@ function handleAssistant(state: ClaudeState, rec: Record<string, unknown>, ts: n
   if (model) state.models.add(model);
 
   const usage = usageFrom(message?.usage);
-  if (usage) addTokens(state.tokens, usage);
+  if (usage) {
+    addTokens(state.tokens, usage);
+    // Claude Code can switch model mid-session (a subagent on Haiku, a
+    // compaction on Sonnet), so usage is only meaningful attached to the model
+    // that spent it.
+    const bucket = (state.tokensByModel[model ?? 'unknown'] ??= {});
+    addTokens(bucket, usage);
+  }
 
   if (rec.isApiErrorMessage === true) {
     state.events.push({
@@ -260,7 +270,13 @@ function handleCostState(state: ClaudeState, rec: Record<string, unknown>): void
 
   const modelUsage = asRecord(rec.modelUsage);
   if (modelUsage) {
-    for (const model of Object.keys(modelUsage)) state.models.add(model);
+    for (const [model, raw] of Object.entries(modelUsage)) {
+      state.models.add(model);
+      // `costUSD` is Claude Code's own figure for that model, so it is a
+      // measurement and replaces — never supplements — an estimate.
+      const cost = asNumber(asRecord(raw)?.costUSD);
+      if (cost !== undefined) state.costByModel[model] = cost;
+    }
     state.meta.modelUsage = modelUsage;
   }
   const added = asNumber(rec.totalLinesAdded);
@@ -299,6 +315,10 @@ export const claudeCodeAdapter: ProviderAdapter = {
       cliVersion: previous?.cliVersion,
       models: new Set(previous?.models ?? []),
       tokens: { ...(previous?.tokens ?? {}) },
+      tokensByModel: Object.fromEntries(
+        Object.entries(previous?.tokensByModel ?? {}).map(([k, v]) => [k, { ...v }]),
+      ),
+      costByModel: { ...(previous?.costByModel ?? {}) },
       events: [],
       costUsd: previous?.costUsd,
       apiMs: previous?.measured.apiMs,
@@ -433,7 +453,9 @@ export const claudeCodeAdapter: ProviderAdapter = {
         source: 'claude-code cost-state (same values as /cost)',
       },
       tokens: state.tokens,
+      tokensByModel: state.tokensByModel,
       costUsd: state.costUsd,
+      costByModel: Object.keys(state.costByModel).length > 0 ? state.costByModel : undefined,
       providerMeta: state.meta,
       warnings: [...(previous?.warnings ?? []), ...state.warnings],
       bytesConsumed: read.bytesConsumed,

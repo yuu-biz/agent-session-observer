@@ -1,5 +1,6 @@
 import { computeActivity } from './activity.js';
 import { computeLiveState } from './liveness.js';
+import { breakdownCost, DEFAULT_RATES, type ModelCost, type RateTable } from './pricing.js';
 import { oneLine } from './tools.js';
 import type {
   DiscoveryRoot,
@@ -28,6 +29,49 @@ export interface BuildSessionInput {
   idleThresholdMs: number;
   marker?: LiveMarker | undefined;
   now: number;
+  /** Price list used for cost estimates. Omitted in tests that ignore cost. */
+  rates?: RateTable;
+}
+
+interface CostSplit {
+  modelCosts: ModelCost[];
+  estimatedCostUsd?: number;
+  unpricedModels: string[];
+}
+
+/**
+ * Splits a session's spend into per-model rows.
+ *
+ * A session is measured or estimated, never both. When the provider priced the
+ * session itself, this app does not second-guess any part of it: the rows come
+ * straight from the provider's own per-model figures, and no estimate is
+ * produced at all. Only when nothing was written down does the price list run.
+ *
+ * Mixing the two would produce a total that is partly a fact and partly a
+ * guess, which is the one thing the cost columns exist to prevent.
+ */
+function splitCost(parsed: ParsedSession, rates: RateTable): CostSplit {
+  // A cache entry written by an older build can arrive without this map.
+  const tokensByModel = parsed.tokensByModel ?? {};
+  if (parsed.costUsd !== undefined) {
+    const measured = parsed.costByModel ?? {};
+    const modelCosts: ModelCost[] = Object.keys(measured)
+      .sort()
+      .map((model) => ({
+        model,
+        tokens: tokensByModel[model] ?? {},
+        costUsd: measured[model],
+        basis: 'measured' as const,
+      }));
+    return { modelCosts, unpricedModels: [] };
+  }
+
+  const breakdown = breakdownCost(tokensByModel, undefined, rates);
+  return {
+    modelCosts: breakdown.models,
+    estimatedCostUsd: breakdown.estimatedUsd > 0 ? breakdown.estimatedUsd : undefined,
+    unpricedModels: breakdown.unpricedModels,
+  };
 }
 
 function countEvents(events: readonly NormalizedEvent[]): SessionCounters {
@@ -73,6 +117,7 @@ function addTokens(target: TokenUsage, src: TokenUsage | undefined): void {
 
 export function buildSessionSummary(input: BuildSessionInput): SessionSummary {
   const { parsed, root, filePath, fileSize, fileMtimeMs, idleThresholdMs, marker, now } = input;
+  const cost = splitCost(parsed, input.rates ?? DEFAULT_RATES);
 
   const events = parsed.events.slice().sort((a, b) => a.ts - b.ts);
   const first = events[0];
@@ -117,7 +162,11 @@ export function buildSessionSummary(input: BuildSessionInput): SessionSummary {
     measured: parsed.measured,
     counters,
     tokens: parsed.tokens,
+    tokensByModel: parsed.tokensByModel ?? {},
     costUsd: parsed.costUsd,
+    estimatedCostUsd: cost.estimatedCostUsd,
+    modelCosts: cost.modelCosts,
+    unpricedModels: cost.unpricedModels,
     live,
     providerMeta: parsed.providerMeta,
   };

@@ -43,11 +43,32 @@ beforeAll(async () => {
         { provider: 'claude-code', path: CLAUDE_ROOT },
       ],
     },
+    // Pinned at an empty home so the suite sees the fixtures and nothing else.
+    // Without this the assertions below would be about whatever Codex and
+    // Claude Code happen to have written on the machine running the test.
+    discovery: { homeDir: cacheHome, env: {}, platform: 'linux' },
     dev: true,
     version: 'test',
   });
   base = server.url;
 });
+
+/**
+ * The server scans in the background, so an assertion about scanned *content*
+ * has to wait for it. Shape-only tests deliberately do not.
+ */
+async function waitForScan(timeoutMs = 10_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const status = (await (await fetch(`${base}/api/status`)).json()) as {
+      scanning: boolean;
+      sessionCount: number;
+    };
+    if (!status.scanning && status.sessionCount > 0) return;
+    if (Date.now() > deadline) throw new Error('the initial scan did not finish in time');
+    await new Promise((r) => setTimeout(r, 50));
+  }
+}
 
 afterAll(async () => {
   await server.close();
@@ -193,6 +214,29 @@ describe('api endpoints', () => {
     expect(comparison.map((c) => c.provider)).toEqual(['codex', 'claude-code']);
     // Codex records no cost; that must be stated, not shown as zero.
     expect(comparison[0]?.unavailable.join(' ')).toContain('cost');
+  });
+
+  it('serves the cost shape, saying which prices it charged', async () => {
+    await waitForScan();
+    const cost = (await (await fetch(`${base}/api/cost?days=3650`)).json()) as {
+      roi: Record<string, unknown>;
+      models: Array<{ model: string; basis: string }>;
+      unpricedModels: string[];
+      daily: unknown[];
+      byProvider: Array<{ provider: string }>;
+      usingListPrices: boolean;
+      ratesAsOf: string;
+    };
+    expect(cost.daily.length).toBeGreaterThan(0);
+    expect(cost.byProvider.map((p) => p.provider).sort()).toEqual(['claude-code', 'codex']);
+    expect(cost.usingListPrices).toBe(true);
+    expect(cost.ratesAsOf).toMatch(/^\d{4}-\d{2}$/);
+    // The fixtures use invented model names on purpose, so nothing can be
+    // priced and every one of them has to be reported as unpriced rather than
+    // silently costing nothing.
+    expect(cost.models.every((m) => m.basis === 'measured' || m.basis === 'unpriced')).toBe(true);
+    expect(cost.unpricedModels.length).toBeGreaterThan(0);
+    expect(cost.roi.costBasis).toBe('measured');
   });
 });
 

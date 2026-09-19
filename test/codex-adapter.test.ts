@@ -66,13 +66,30 @@ describe('codex adapter: modern item_completed layout', () => {
 
   it('sums token usage from token_usage_record only', async () => {
     const parsed = await codexAdapter.parseFile({ filePath: MODERN, root });
+    // The log says input_tokens 1200 with 400 of them cached. The normalized
+    // buckets are disjoint, so `input` is the 800 that were actually billed at
+    // the full rate — the same shape Claude Code reports natively.
     expect(parsed?.tokens).toEqual({
-      input: 1200,
+      input: 800,
       output: 150,
       cacheRead: 400,
       cacheWrite: 0,
       reasoning: 40,
       total: 1350,
+    });
+  });
+
+  it('attributes token usage to the model announced by turn_context', async () => {
+    const parsed = await codexAdapter.parseFile({ filePath: MODERN, root });
+    expect(parsed?.tokensByModel).toEqual({
+      'demo-model-1': {
+        input: 800,
+        output: 150,
+        cacheRead: 400,
+        cacheWrite: 0,
+        reasoning: 40,
+        total: 1350,
+      },
     });
   });
 });

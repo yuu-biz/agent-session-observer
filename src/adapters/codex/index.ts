@@ -61,7 +61,10 @@ function usageFrom(raw: unknown): TokenUsage | undefined {
   const cacheWrite = asNumber(u.cache_write_input_tokens);
   const reasoning = asNumber(u.reasoning_output_tokens);
   const total = asNumber(u.total_tokens);
-  if (input !== undefined) t.input = input;
+  // Codex reports OpenAI's accounting, where `input_tokens` already contains
+  // `cached_input_tokens`. The normalized model keeps the buckets disjoint, so
+  // the cached share is taken back out here rather than everywhere downstream.
+  if (input !== undefined) t.input = Math.max(0, input - (cacheRead ?? 0));
   if (output !== undefined) t.output = output;
   if (cacheRead !== undefined) t.cacheRead = cacheRead;
   if (cacheWrite !== undefined) t.cacheWrite = cacheWrite;
@@ -135,6 +138,13 @@ interface CodexState {
   cliVersion?: string;
   models: Set<string>;
   tokens: TokenUsage;
+  tokensByModel: Record<string, TokenUsage>;
+  /**
+   * Codex writes token usage without naming the model, but it announces the
+   * model in `turn_context` before the turn that spends them. Carrying the last
+   * announced model forward is what lets usage be attributed at all.
+   */
+  currentModel?: string;
   apiMs: number;
   toolMs: number;
   hasApiMs: boolean;
@@ -504,6 +514,9 @@ export const codexAdapter: ProviderAdapter = {
       cliVersion: previous?.cliVersion,
       models: new Set(previous?.models ?? []),
       tokens: { ...(previous?.tokens ?? {}) },
+      tokensByModel: Object.fromEntries(
+        Object.entries(previous?.tokensByModel ?? {}).map(([k, v]) => [k, { ...v }]),
+      ),
       apiMs: previous?.measured.apiMs ?? 0,
       toolMs: previous?.measured.toolMs ?? 0,
       hasApiMs: previous?.measured.apiMs !== undefined,
@@ -512,6 +525,7 @@ export const codexAdapter: ProviderAdapter = {
       meta: { ...(previous?.providerMeta ?? {}) },
       warnings: [],
     };
+    state.currentModel = asString(state.meta.currentModel) ?? undefined;
 
     const read = await readJsonl(
       filePath,
@@ -532,7 +546,10 @@ export const codexAdapter: ProviderAdapter = {
             return;
           case 'turn_context': {
             const model = asString(payload?.model);
-            if (model) state.models.add(model);
+            if (model) {
+              state.models.add(model);
+              state.currentModel = model;
+            }
             const cwd = asString(payload?.cwd);
             if (cwd && !state.cwd) state.cwd = cwd;
             return;
@@ -544,12 +561,19 @@ export const codexAdapter: ProviderAdapter = {
             if (payload) handleResponseItem(state, payload, ts);
             return;
           case 'token_usage_record': {
-            addTokens(state.tokens, usageFrom(payload?.usage));
+            const usage = usageFrom(payload?.usage);
+            addTokens(state.tokens, usage);
+            const model = asString(payload?.model) ?? state.currentModel;
+            if (model && usage) {
+              const bucket = (state.tokensByModel[model] ??= {});
+              addTokens(bucket, usage);
+            }
             state.buckets.common.push({
               ts,
               kind: 'model_usage',
               subtype: type,
-              tokens: usageFrom(payload?.usage),
+              model,
+              tokens: usage,
             });
             return;
           }
@@ -584,6 +608,9 @@ export const codexAdapter: ProviderAdapter = {
 
     const channel: Channel = (state.meta.channel as Channel | undefined) ?? pickChannel(state.buckets);
     state.meta.channel = channel;
+    // Survives across an incremental resume, where the next chunk of the file
+    // may hold usage records before the next `turn_context`.
+    if (state.currentModel) state.meta.currentModel = state.currentModel;
 
     const fresh = [...state.buckets.common, ...state.buckets[channel]];
     const events = previous ? [...previous.events, ...fresh] : fresh;
@@ -611,6 +638,7 @@ export const codexAdapter: ProviderAdapter = {
         source: 'codex task_complete.duration_ms / tool output metadata',
       },
       tokens: state.tokens,
+      tokensByModel: state.tokensByModel,
       providerMeta: state.meta,
       warnings: [...(previous?.warnings ?? []), ...state.warnings],
       bytesConsumed: read.bytesConsumed,

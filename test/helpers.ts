@@ -61,6 +61,9 @@ export function fakeSession(
       compactions: 0,
     },
     tokens: {},
+    tokensByModel: {},
+    modelCosts: [],
+    unpricedModels: [],
     live: { status: 'ended', confidence: 'low', evidence: [] },
     ...overrides,
   };

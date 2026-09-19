@@ -17,7 +17,12 @@ import type { ParsedSession } from '../core/types.js';
  * logs, and never leaves the machine. Deleting the cache is always safe.
  */
 
-export const CACHE_VERSION = 2;
+/**
+ * Bump whenever the shape an adapter produces changes, so that entries written
+ * by an older build are discarded rather than read back missing fields. v3
+ * added per-model token attribution, which no v2 entry can supply.
+ */
+export const CACHE_VERSION = 3;
 
 export interface CachedFile {
   filePath: string;

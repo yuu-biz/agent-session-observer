@@ -7,6 +7,10 @@
  * requires touching `core/` or `web/`.
  */
 
+import type { ModelCost } from './pricing.js';
+
+export type { ModelCost };
+
 export type ProviderId = 'codex' | 'claude-code';
 
 /** Where a log tree physically lives. */
@@ -53,12 +57,28 @@ export type EventKind =
   | 'error'
   | 'system';
 
+/**
+ * Token counts, normalized so the same field means the same thing whichever
+ * provider produced it.
+ *
+ * The buckets are disjoint: `input` is prompt tokens that were NOT served from
+ * cache. OpenAI reports cached tokens *inside* its input count and Anthropic
+ * reports them beside it, so the Codex adapter subtracts. Without that, the
+ * same conversation looks more expensive under one CLI than the other purely
+ * because of how each one counts — and every ratio built on top inherits that
+ * skew.
+ */
 export interface TokenUsage {
+  /** Prompt tokens billed at the full input rate (cache misses only). */
   input?: number;
   output?: number;
+  /** Prompt tokens served from the provider's cache, billed at a discount. */
   cacheRead?: number;
+  /** Prompt tokens written into the cache, where the provider charges for it. */
   cacheWrite?: number;
+  /** Thinking tokens. A SUBSET of `output`, never added to it. */
   reasoning?: number;
+  /** The provider's own total, when it reports one. Not a sum of the above. */
   total?: number;
 }
 
@@ -203,8 +223,19 @@ export interface SessionSummary {
   measured: MeasuredDurations;
   counters: SessionCounters;
   tokens: TokenUsage;
+  /** Token usage split by model. Empty when the provider labels no usage. */
+  tokensByModel: Record<string, TokenUsage>;
   /** Only when the provider reports real money, e.g. Claude Code `cost-state`. */
   costUsd?: number;
+  /**
+   * Tokens x a price list, for the models the provider did not price itself.
+   * An ESTIMATE, kept in its own field so it can never be read as `costUsd`.
+   */
+  estimatedCostUsd?: number;
+  /** Per-model split, each row carrying whether it was measured or estimated. */
+  modelCosts: ModelCost[];
+  /** Models with real token usage that no rate covers. Never counted as zero. */
+  unpricedModels: string[];
 
   live: LiveState;
   /** Set when another file describes the same session and was preferred. */
@@ -268,7 +299,17 @@ export interface ParsedSession {
   events: NormalizedEvent[];
   measured: MeasuredDurations;
   tokens: TokenUsage;
+  /**
+   * Token usage keyed by model id. Adapters fill this from whatever the log
+   * labels; `core/` is what turns it into money.
+   */
+  tokensByModel: Record<string, TokenUsage>;
   costUsd?: number;
+  /**
+   * Per-model cost the provider itself recorded. Like `costUsd`, only ever set
+   * when the number was written down — never derived from tokens.
+   */
+  costByModel?: Record<string, number>;
   providerMeta?: Record<string, unknown>;
   warnings: string[];
   /** Bytes consumed so far; enables append-only incremental re-parsing. */

@@ -1,6 +1,7 @@
 import { DEFAULT_IDLE_THRESHOLD_MS } from '../core/activity.js';
 import type { AppConfig } from '../core/config.js';
 import { dedupeSessions } from '../core/dedupe.js';
+import { buildRateTable, type RateTable } from '../core/pricing.js';
 import { buildSessionDetail, buildSessionSummary } from '../core/session-builder.js';
 import { DAY_MS } from '../core/time.js';
 import type {
@@ -155,6 +156,15 @@ export class SessionScanner {
     return this.options.now ? this.options.now() : Date.now();
   }
 
+  /**
+   * The price list, with the user's overrides applied. Rebuilt per scan rather
+   * than memoised so that editing `modelRates` and rescanning is enough to see
+   * new numbers.
+   */
+  private rates(): RateTable {
+    return buildRateTable(this.options.config.modelRates);
+  }
+
   async scan(): Promise<ScanResult> {
     if (this.scanning && this.lastResult) return this.lastResult;
     this.scanning = true;
@@ -170,6 +180,7 @@ export class SessionScanner {
 
     try {
       const config = this.options.config;
+      const rates = this.rates();
       if (!this.cache) this.cache = await ScanCache.open();
       const cache = this.cache;
 
@@ -273,6 +284,7 @@ export class SessionScanner {
             fileSize: task.size,
             fileMtimeMs: task.mtimeMs,
             idleThresholdMs: this.options.config.idleThresholdMs ?? DEFAULT_IDLE_THRESHOLD_MS,
+            rates,
             marker: markers.get(`${task.root.provider}:${parsed.sessionId}`),
             now: this.now(),
           });
@@ -350,6 +362,7 @@ export class SessionScanner {
       fileSize: st?.size ?? summary.fileSize,
       fileMtimeMs: st?.mtimeMs ?? summary.fileMtimeMs,
       idleThresholdMs: this.options.config.idleThresholdMs,
+      rates: this.rates(),
       now: this.now(),
     });
     return buildSessionDetail({ ...rebuilt, live: summary.live }, parsed.events);

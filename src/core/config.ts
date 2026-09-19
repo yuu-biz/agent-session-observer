@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { clampIdleThreshold, DEFAULT_IDLE_THRESHOLD_MS } from './activity.js';
+import type { ModelRate } from './pricing.js';
 import type { ProviderId } from './types.js';
 
 /**
@@ -29,6 +30,17 @@ export interface AppConfig {
   refreshIntervalMs: number;
   /** Port for the local HTTP server. 0 picks a free port. */
   port: number;
+  /**
+   * Overrides for the bundled price list, in USD per 1,000,000 tokens. The key
+   * is matched against the model id exactly as `pricing.ts` matches its own
+   * entries, so `"gpt-5"` reprices a family and `"gpt-5-codex"` one model.
+   *
+   * This exists because list prices are the wrong number for most
+   * organisations: committed-use discounts, resold capacity and flat-rate
+   * seats all produce a different cost per token, and a cost figure nobody
+   * recognises is worse than none.
+   */
+  modelRates: Record<string, Partial<ModelRate>>;
 }
 
 export const DEFAULT_CONFIG: AppConfig = {
@@ -38,6 +50,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   lookbackDays: 30,
   refreshIntervalMs: 5_000,
   port: 7781,
+  modelRates: {},
 };
 
 export function configDir(): string {
@@ -80,6 +93,23 @@ export function normalizeConfig(raw: unknown): AppConfig {
       ? Math.min(600_000, Math.max(1_000, Math.round(obj.refreshIntervalMs)))
       : DEFAULT_CONFIG.refreshIntervalMs;
 
+  const modelRates: AppConfig['modelRates'] = {};
+  const rawRates = obj.modelRates;
+  if (typeof rawRates === 'object' && rawRates !== null && !Array.isArray(rawRates)) {
+    for (const [model, value] of Object.entries(rawRates as Record<string, unknown>)) {
+      if (typeof value !== 'object' || value === null) continue;
+      const v = value as Record<string, unknown>;
+      const rate: Partial<ModelRate> = {};
+      for (const field of ['input', 'output', 'cacheRead', 'cacheWrite'] as const) {
+        const n = v[field];
+        // A negative or non-finite price would silently corrupt every total
+        // downstream, so it is dropped rather than clamped.
+        if (typeof n === 'number' && Number.isFinite(n) && n >= 0) rate[field] = n;
+      }
+      if (Object.keys(rate).length > 0) modelRates[model.trim().toLowerCase()] = rate;
+    }
+  }
+
   const port =
     typeof obj.port === 'number' && Number.isInteger(obj.port) && obj.port >= 0 && obj.port <= 65535
       ? obj.port
@@ -94,6 +124,7 @@ export function normalizeConfig(raw: unknown): AppConfig {
     lookbackDays,
     refreshIntervalMs,
     port,
+    modelRates,
   };
 }
 

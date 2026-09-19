@@ -4,8 +4,9 @@ import path from 'node:path';
 import { loadConfig, normalizeConfig, saveConfig, type AppConfig } from '../core/config.js';
 import { localDayKey, localTimeZoneName } from '../core/time.js';
 import type { ProviderId } from '../core/types.js';
+import type { DiscoveryOptions } from '../discovery/roots.js';
 import { SessionScanner, type ScanProgress } from '../indexer/scanner.js';
-import { buildComparison, buildDay, buildOverview, type StatusResponse } from './api.js';
+import { buildComparison, buildCost, buildDay, buildOverview, type StatusResponse } from './api.js';
 import { getAssetSource, normalizeAssetPath } from './assets.js';
 
 /**
@@ -88,6 +89,13 @@ export interface StartServerOptions {
   /** Dev mode serves nothing static and expects Vite on another port. */
   dev?: boolean;
   version: string;
+  /**
+   * Root-discovery overrides, passed straight to the scanner. The CLI never
+   * sets this; the test suite pins `homeDir` and `platform` so a test run
+   * cannot wander into whatever Codex or Claude Code are installed on the
+   * machine running it.
+   */
+  discovery?: Partial<DiscoveryOptions>;
 }
 
 export async function startServer(options: StartServerOptions): Promise<ServerHandle> {
@@ -96,6 +104,7 @@ export async function startServer(options: StartServerOptions): Promise<ServerHa
 
   const scanner = new SessionScanner({
     config,
+    ...(options.discovery ? { discovery: options.discovery } : {}),
     onProgress: (p) => {
       lastProgress = p;
       broadcast('progress', p);
@@ -251,6 +260,20 @@ export async function startServer(options: StartServerOptions): Promise<ServerHa
             days: Number.isFinite(days) ? days : 7,
             provider,
             now: Date.now(),
+            modelRates: config.modelRates,
+          }),
+        );
+        return;
+
+      case 'GET /api/cost':
+        json(
+          res,
+          200,
+          buildCost(scanner, {
+            days: Number.isFinite(days) ? days : 7,
+            provider,
+            now: Date.now(),
+            modelRates: config.modelRates,
           }),
         );
         return;
