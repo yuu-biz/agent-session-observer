@@ -2,22 +2,43 @@ import type { StatusResponse } from '@api/api';
 import type { ProviderId } from '@core/types';
 import { useCallback, useEffect, useState } from 'react';
 
+import {
+  BrandMark,
+  IconCompare,
+  IconCost,
+  IconDaily,
+  IconOverview,
+  IconPower,
+  IconSources,
+} from './components/icons';
 import { api, subscribe } from './lib/api';
 import { todayKey } from './lib/format';
 import { useI18n, type Lang, type MessageKey } from './lib/i18n';
 import { CompareView } from './views/CompareView';
+import { CostView } from './views/CostView';
 import { DayView } from './views/DayView';
 import { Overview } from './views/Overview';
 import { SessionView } from './views/SessionView';
 import { SourcesView } from './views/SourcesView';
 
-type Tab = 'overview' | 'day' | 'compare' | 'sources';
+type Tab = 'overview' | 'day' | 'cost' | 'compare' | 'sources';
 
-const TABS: Array<[Tab, MessageKey]> = [
-  ['overview', 'nav.overview'],
-  ['day', 'nav.daily'],
-  ['compare', 'nav.compare'],
-  ['sources', 'nav.sources'],
+interface TabDef {
+  id: Tab;
+  label: MessageKey;
+  Icon: () => React.ReactElement;
+  /** Views that summarise a range of days and take the range control. */
+  ranged: boolean;
+  /** Views that can be narrowed to one provider. */
+  filterable: boolean;
+}
+
+const TABS: TabDef[] = [
+  { id: 'overview', label: 'nav.overview', Icon: IconOverview, ranged: true, filterable: true },
+  { id: 'day', label: 'nav.daily', Icon: IconDaily, ranged: false, filterable: true },
+  { id: 'cost', label: 'nav.cost', Icon: IconCost, ranged: true, filterable: true },
+  { id: 'compare', label: 'nav.compare', Icon: IconCompare, ranged: true, filterable: false },
+  { id: 'sources', label: 'nav.sources', Icon: IconSources, ranged: false, filterable: false },
 ];
 
 export function App(): React.ReactElement {
@@ -82,7 +103,7 @@ export function App(): React.ReactElement {
 
   if (quit) {
     return (
-      <div className="app">
+      <div className="app" style={{ gridTemplateColumns: 'minmax(0, 1fr)' }}>
         <main className="main">
           <div className="empty" style={{ paddingTop: 80 }}>
             {t('shell.quitDone')}
@@ -92,75 +113,41 @@ export function App(): React.ReactElement {
     );
   }
 
+  const current = TABS.find((x) => x.id === tab) ?? TABS[0]!;
+  const subtitle = sessionKey
+    ? t('nav.sessionSub')
+    : current.ranged
+      ? t('shell.rangeSub', { n: days })
+      : current.id === 'day'
+        ? dayKey
+        : (status?.timezone ?? '');
+
   return (
     <div className="app">
-      <header className="topbar">
-        <div className="brand">
-          Agent Session Observer
-          <span>v{status?.version ?? '—'}</span>
+      <aside className="rail">
+        <div className="rail-mark" title={`Agent Session Observer v${status?.version ?? '—'}`}>
+          <BrandMark />
         </div>
 
-        <nav className="nav">
-          {TABS.map(([id, key]) => (
+        <nav className="rail-nav">
+          {TABS.map(({ id, label, Icon }) => (
             <button
               key={id}
               aria-current={tab === id && !sessionKey}
+              title={t(label)}
               onClick={() => {
                 setTab(id);
                 setSessionKey(null);
               }}
             >
-              {t(key)}
+              <Icon />
+              {t(label)}
             </button>
           ))}
         </nav>
 
-        {(tab === 'overview' || tab === 'compare') && !sessionKey && (
-          <div className="seg">
-            {[1, 7, 14, 30].map((d) => (
-              <button key={d} aria-pressed={days === d} onClick={() => setDays(d)}>
-                {t('common.days', { n: d })}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {tab !== 'compare' && tab !== 'sources' && !sessionKey && (
-          <div className="seg">
-            {(
-              [
-                ['all', 'common.all'],
-                ['codex', 'common.codex'],
-                ['claude-code', 'common.claudeCode'],
-              ] as Array<[ProviderId | 'all', MessageKey]>
-            ).map(([id, key]) => (
-              <button key={id} aria-pressed={provider === id} onClick={() => setProvider(id)}>
-                {t(key)}
-              </button>
-            ))}
-          </div>
-        )}
-
-        <div className="topbar-right">
-          <span className="privacy-banner" title={t('shell.localOnlyTitle')}>
-            🔒 {t('shell.localOnly')}
-          </span>
-
-          {scanning ? (
-            <span className="dim">
-              <span className="spin" />{' '}
-              {t('shell.scanning', {
-                done: progress?.filesDone ?? 0,
-                total: progress?.filesTotal ?? 0,
-              })}
-            </span>
-          ) : (
-            <span className="dim">
-              {t('shell.sessions', { n: status?.sessionCount ?? 0 })} · {status?.timezone ?? ''}
-            </span>
-          )}
-
-          <div className="seg" title={t('shell.language')}>
+        <div className="rail-foot">
+          <div className="seg stack compact" title={t('shell.language')}>
             {(['en', 'ja'] as Lang[]).map((l) => (
               <button key={l} aria-pressed={lang === l} onClick={() => setLang(l)}>
                 {l === 'en' ? 'EN' : '日本語'}
@@ -168,62 +155,116 @@ export function App(): React.ReactElement {
             ))}
           </div>
 
-          <button
-            className="btn"
-            onClick={() => {
-              void api.rescan();
-            }}
-            disabled={scanning}
-          >
-            {t('shell.rescan')}
-          </button>
-
           {status?.canQuit && (
-            <button className="btn" onClick={onQuit} title={t('shell.quitTitle')}>
-              {t('shell.quit')}
+            <button className="btn icon" onClick={onQuit} title={t('shell.quitTitle')}>
+              <IconPower />
             </button>
           )}
         </div>
-      </header>
+      </aside>
 
-      {scanning && pct !== null && (
-        <div className="progress">
-          <i style={{ width: `${pct}%` }} />
-        </div>
-      )}
+      <div className="frame">
+        <header className="topbar">
+          <div className="view-title">
+            {sessionKey ? t('nav.session') : t(current.label)}
+            <small>{subtitle}</small>
+          </div>
 
-      <main className="main">
-        {status && status.roots.length === 0 && !scanning && (
-          <div className="note warn">{t('shell.noRoots')}</div>
-        )}
+          {current.ranged && !sessionKey && (
+            <div className="seg">
+              {[1, 7, 14, 30].map((d) => (
+                <button key={d} aria-pressed={days === d} onClick={() => setDays(d)}>
+                  {t('common.days', { n: d })}
+                </button>
+              ))}
+            </div>
+          )}
 
-        {sessionKey ? (
-          <SessionView sessionKey={sessionKey} onBack={() => setSessionKey(null)} />
-        ) : tab === 'overview' ? (
-          <Overview
-            days={days}
-            provider={provider}
-            refreshToken={refreshToken}
-            onPickDay={(d) => {
-              setDayKey(d);
-              setTab('day');
-            }}
-            onPickSession={openSession}
-          />
-        ) : tab === 'day' ? (
-          <DayView
-            dayKey={dayKey}
-            provider={provider}
-            refreshToken={refreshToken}
-            onChangeDay={setDayKey}
-            onPickSession={openSession}
-          />
-        ) : tab === 'compare' ? (
-          <CompareView days={days} refreshToken={refreshToken} />
-        ) : (
-          <SourcesView status={status} onConfigSaved={refresh} />
-        )}
-      </main>
+          {current.filterable && !sessionKey && (
+            <div className="seg">
+              {(
+                [
+                  ['all', 'common.all'],
+                  ['codex', 'common.codex'],
+                  ['claude-code', 'common.claudeCode'],
+                ] as Array<[ProviderId | 'all', MessageKey]>
+              ).map(([id, key]) => (
+                <button key={id} aria-pressed={provider === id} onClick={() => setProvider(id)}>
+                  {t(key)}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div className="topbar-right">
+            <span className="privacy-banner" title={t('shell.localOnlyTitle')}>
+              🔒 {t('shell.localOnly')}
+            </span>
+
+            {scanning ? (
+              <span className="dim">
+                <span className="spin" />{' '}
+                {t('shell.scanning', {
+                  done: progress?.filesDone ?? 0,
+                  total: progress?.filesTotal ?? 0,
+                })}
+              </span>
+            ) : (
+              <span className="dim">
+                {t('shell.sessions', { n: status?.sessionCount ?? 0 })} · {status?.timezone ?? ''}
+              </span>
+            )}
+
+            <button
+              className="btn"
+              onClick={() => {
+                void api.rescan();
+              }}
+              disabled={scanning}
+            >
+              {t('shell.rescan')}
+            </button>
+          </div>
+        </header>
+
+        {/* Measurement scale and scan progress in one strip. */}
+        <div className="rule">{scanning && pct !== null && <i style={{ width: `${pct}%` }} />}</div>
+
+        <main className="main">
+          {status && status.roots.length === 0 && !scanning && (
+            <div className="note warn">{t('shell.noRoots')}</div>
+          )}
+
+          {sessionKey ? (
+            <SessionView sessionKey={sessionKey} onBack={() => setSessionKey(null)} />
+          ) : tab === 'overview' ? (
+            <Overview
+              days={days}
+              provider={provider}
+              refreshToken={refreshToken}
+              onPickDay={(d) => {
+                setDayKey(d);
+                setTab('day');
+              }}
+              onPickSession={openSession}
+            />
+          ) : tab === 'day' ? (
+            <DayView
+              dayKey={dayKey}
+              provider={provider}
+              refreshToken={refreshToken}
+              onChangeDay={setDayKey}
+              onPickSession={openSession}
+            />
+          ) : tab === 'cost' ? (
+            <CostView days={days} provider={provider} refreshToken={refreshToken} />
+          ) : tab === 'compare' ? (
+            <CompareView days={days} refreshToken={refreshToken} />
+          ) : (
+            <SourcesView status={status} onConfigSaved={refresh} />
+          )}
+        </main>
+      </div>
     </div>
   );
 }

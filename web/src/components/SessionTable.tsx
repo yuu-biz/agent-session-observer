@@ -78,13 +78,8 @@ export function SessionTable({
           {sessions.map((s) => (
             <tr
               key={s.key}
-              className="clickable"
+              className={`clickable row-${s.provider}${selectedKey === s.key ? ' selected' : ''}`}
               onClick={() => onSelect(s.key)}
-              style={
-                selectedKey === s.key
-                  ? { outline: '1px solid var(--accent)', outlineOffset: -1 }
-                  : undefined
-              }
             >
               <td
                 title={`${t(`live.${s.live.status}` as MessageKey)} · ${t('overview.confidence', {
@@ -124,7 +119,20 @@ export function SessionTable({
               <td className="num">{s.counters.userPrompts}</td>
               <td className="num">{s.counters.toolCalls}</td>
               <td className="num dim">{fmtCompact(tokenTotal(s.tokens))}</td>
-              <td className="num dim">{s.costUsd == null ? t('common.na') : fmtCost(s.costUsd)}</td>
+              {/* A price-list estimate is marked in place, so a column of
+                  dollars is never a mix of facts and guesses read as one. */}
+              <td className="num dim">
+                {s.costUsd != null ? (
+                  fmtCost(s.costUsd)
+                ) : s.estimatedCostUsd != null ? (
+                  <span title={t('table.costEstimated')}>
+                    <span className="faint">~</span>
+                    {fmtCost(s.estimatedCostUsd)}
+                  </span>
+                ) : (
+                  t('common.na')
+                )}
+              </td>
             </tr>
           ))}
         </tbody>

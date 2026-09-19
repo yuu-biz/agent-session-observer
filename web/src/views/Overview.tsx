@@ -47,6 +47,43 @@ export function Overview({
 
   const today = data.today;
   const totals = data.totals;
+  const roi = data.roi;
+
+  /**
+   * Cost is shown with its provenance attached, never as a bare number: a
+   * measured figure and a price-list estimate look identical in a tile, and
+   * only one of them is a fact.
+   */
+  const basisSub =
+    roi.costBasis === 'measured'
+      ? t('overview.costBasisMeasured')
+      : roi.costBasis === 'estimated'
+        ? t('overview.costBasisEstimated')
+        : roi.costBasis === 'mixed'
+          ? t('overview.costBasisMixed')
+          : t('overview.costNone');
+  const rangeCostKind = roi.costBasis === 'measured' ? 'measured' : 'estimate';
+
+  const todayCost = today?.hasCostData
+    ? {
+        // A day that mixes the two is labelled as an estimate: the total is
+        // only as trustworthy as its least certain part.
+        kind: (today.hasEstimatedCost ? 'estimate' : 'measured') as 'estimate' | 'measured',
+        value: fmtCost((today.costUsd ?? 0) + (today.estimatedCostUsd ?? 0)),
+        sub: today.hasEstimatedCost
+          ? t('cost.totalSub', {
+              measured: fmtCost(today.costUsd),
+              estimated: fmtCost(today.estimatedCostUsd),
+            })
+          : t('overview.costFrom'),
+      }
+    : today?.hasEstimatedCost
+      ? {
+          kind: 'estimate' as const,
+          value: fmtCost(today.estimatedCostUsd),
+          sub: t('overview.costBasisEstimated'),
+        }
+      : { kind: 'measured' as const, value: t('common.na'), sub: t('overview.costNone') };
 
   return (
     <>
@@ -104,9 +141,9 @@ export function Overview({
           />
           <Stat
             label={t('overview.cost')}
-            kind="measured"
-            value={today?.hasCostData ? fmtCost(today.costUsd) : t('common.na')}
-            sub={today?.hasCostData ? t('overview.costFrom') : t('overview.costNone')}
+            kind={todayCost.kind}
+            value={todayCost.value}
+            sub={todayCost.sub}
           />
         </Tiles>
       </Panel>
@@ -154,9 +191,61 @@ export function Overview({
           <Stat label={t('overview.tokens')} value={fmtCompact(tokenTotal(totals.tokens))} />
           <Stat
             label={t('overview.cost')}
-            kind="measured"
-            value={totals.hasCostData ? fmtCost(totals.costUsd) : t('common.na')}
+            kind={rangeCostKind}
+            value={roi.costUsd == null ? t('common.na') : fmtCost(roi.costUsd)}
+            sub={basisSub}
           />
+        </div>
+      </Panel>
+
+      <Panel title={t('overview.efficiency')} flush>
+        <Tiles>
+          <Stat
+            label={t('cost.perTask')}
+            kind={rangeCostKind}
+            value={roi.costPerTaskUsd == null ? t('common.na') : fmtCost(roi.costPerTaskUsd)}
+            sub={t('cost.perTaskSub', { n: f.number(roi.tasks) })}
+            title={t('cost.perTaskTitle')}
+          />
+          <Stat
+            label={t('cost.activePerTask')}
+            kind="estimate"
+            value={roi.agentMsPerTask == null ? t('common.na') : f.durationPrecise(roi.agentMsPerTask)}
+            sub={t('cost.activePerTaskSub')}
+            title={t('cost.activePerTaskTitle')}
+          />
+          <Stat
+            label={t('cost.perAgentHour')}
+            kind={rangeCostKind}
+            value={
+              roi.costPerAgentHourUsd == null ? t('common.na') : fmtCost(roi.costPerAgentHourUsd)
+            }
+            title={t('cost.perAgentHourTitle')}
+          />
+          <Stat
+            label={t('cost.parallelism')}
+            kind="estimate"
+            value={roi.parallelism == null ? t('common.na') : `${roi.parallelism.toFixed(2)}×`}
+            sub={t('cost.parallelismSub')}
+          />
+          <Stat
+            label={t('cost.tokensPerTask')}
+            value={
+              roi.tokensPerTask == null ? t('common.na') : fmtCompact(Math.round(roi.tokensPerTask))
+            }
+            sub={`${t('cost.cacheHit')} ${
+              roi.cacheHitRate == null ? t('common.na') : `${(roi.cacheHitRate * 100).toFixed(0)}%`
+            }`}
+          />
+          <Stat
+            label={t('cost.cacheSaved')}
+            kind="estimate"
+            value={roi.cacheSavingsUsd == null ? t('common.na') : fmtCost(roi.cacheSavingsUsd)}
+            sub={t('cost.cacheSavedSub')}
+          />
+        </Tiles>
+        <div className="panel-body dim" style={{ fontSize: 11.5 }}>
+          {t('overview.seeCost')}
         </div>
       </Panel>
 

@@ -114,10 +114,30 @@ export function DayView({
             sub={summary ? t('day.avgWhileActive', { avg: summary.avgConcurrency.toFixed(2) }) : '—'}
           />
           <Stat label={t('day.colToolCalls')} value={fmtCompact(summary?.toolCalls ?? 0)} sub={t('overview.prompts', { n: summary?.userPrompts ?? 0 })} />
+          {/* Measured and estimated dollars never merge into one unlabelled
+              number: the badge and the sub-line say which this is. */}
           <Stat
             label={t('day.colCost')}
-            kind="measured"
-            value={summary?.hasCostData ? fmtCost(summary.costUsd) : t('common.na')}
+            kind={summary?.hasCostData && !summary.hasEstimatedCost ? 'measured' : 'estimate'}
+            value={
+              summary?.hasCostData
+                ? fmtCost((summary.costUsd ?? 0) + (summary.estimatedCostUsd ?? 0))
+                : summary?.hasEstimatedCost
+                  ? fmtCost(summary.estimatedCostUsd)
+                  : t('common.na')
+            }
+            sub={
+              summary?.hasCostData && summary.hasEstimatedCost
+                ? t('cost.totalSub', {
+                    measured: fmtCost(summary.costUsd),
+                    estimated: fmtCost(summary.estimatedCostUsd),
+                  })
+                : summary?.hasCostData
+                  ? t('overview.costBasisMeasured')
+                  : summary?.hasEstimatedCost
+                    ? t('overview.costBasisEstimated')
+                    : t('overview.costNone')
+            }
           />
         </Tiles>
       </Panel>
@@ -204,7 +224,7 @@ export function DayView({
             </thead>
             <tbody>
               {summary.byProvider.map((p) => (
-                <tr key={p.provider}>
+                <tr key={p.provider} className={`row-${p.provider}`}>
                   <td>
                     <span className={`badge ${p.provider}`}>{PROVIDER_LABEL[p.provider]}</span>
                   </td>
@@ -213,7 +233,15 @@ export function DayView({
                   <td className="num dim">{f.duration(p.clockActiveMs)}</td>
                   <td className="num">{p.userPrompts}</td>
                   <td className="num">{p.toolCalls}</td>
-                  <td className="num dim">{p.costUsd == null ? t('common.na') : fmtCost(p.costUsd)}</td>
+                  <td className="num dim">
+                    {p.costUsd != null ? (
+                      fmtCost(p.costUsd)
+                    ) : p.estimatedCostUsd != null ? (
+                      <span title={t('table.costEstimated')}>~{fmtCost(p.estimatedCostUsd)}</span>
+                    ) : (
+                      t('common.na')
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>

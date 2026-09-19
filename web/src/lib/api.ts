@@ -1,4 +1,10 @@
-import type { DayResponse, OverviewResponse, ProviderComparison, StatusResponse } from '@api/api';
+import type {
+  CostResponse,
+  DayResponse,
+  OverviewResponse,
+  ProviderComparison,
+  StatusResponse,
+} from '@api/api';
 import type { AppConfig } from '@core/config';
 import type { SessionDetail } from '@core/types';
 
@@ -23,6 +29,8 @@ export const api = {
     get<OverviewResponse>(`/api/overview?days=${days}&provider=${encodeURIComponent(provider)}`),
   day: (date: string, provider: string) =>
     get<DayResponse>(`/api/day?date=${date}&provider=${encodeURIComponent(provider)}`),
+  cost: (days: number, provider: string) =>
+    get<CostResponse>(`/api/cost?days=${days}&provider=${encodeURIComponent(provider)}`),
   comparison: (days: number) => get<ProviderComparison[]>(`/api/comparison?days=${days}`),
   session: (key: string) => get<SessionDetail>(`/api/session?key=${encodeURIComponent(key)}`),
   rescan: () => fetch('/api/rescan', { method: 'POST' }),

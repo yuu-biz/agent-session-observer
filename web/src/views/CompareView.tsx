@@ -20,7 +20,8 @@ import { useI18n, type MessageKey } from '../lib/i18n';
  * through verbatim rather than disappearing.
  */
 const LIMIT_KEYS: Record<string, MessageKey> = {
-  'cost in USD': 'compare.limit.codex.cost',
+  'cost in USD (estimated from token counts and a price list instead)':
+    'compare.limit.codex.cost',
   'per-session runtime marker (liveness is inferred from log recency)':
     'compare.limit.codex.marker',
   'per-turn time-to-first-token': 'compare.limit.claude.ttft',
@@ -109,6 +110,46 @@ export function CompareView({
             )}
             {metric(t('compare.cost'), (r) =>
               r.costUsd === undefined ? notRecorded : fmtCost(r.costUsd),
+            )}
+            {/* Codex records no cost, so the row above is empty for it. The
+                estimate below is what makes the two columns comparable at all,
+                and it is labelled rather than folded into the row above. */}
+            {metric(t('compare.costEstimated'), (r) =>
+              r.estimatedCostUsd === undefined ? (
+                <span className="faint">{t('common.na')}</span>
+              ) : (
+                <>
+                  <span className="faint">~</span>
+                  {fmtCost(r.estimatedCostUsd)}
+                </>
+              ),
+            )}
+            {metric(
+              t('compare.costPerTask'),
+              (r) =>
+                r.roi.costPerTaskUsd === null ? (
+                  <span className="faint">{t('common.na')}</span>
+                ) : (
+                  <>
+                    {r.roi.costBasis !== 'measured' && <span className="faint">~</span>}
+                    {fmtCost(r.roi.costPerTaskUsd)}
+                  </>
+                ),
+              t('cost.perTaskTitle'),
+            )}
+            {metric(
+              t('compare.activePerTask'),
+              (r) =>
+                r.roi.agentMsPerTask === null ? notRecorded : f.durationPrecise(r.roi.agentMsPerTask),
+              t('cost.activePerTaskTitle'),
+            )}
+            {metric(t('compare.tokensPerTask'), (r) =>
+              r.roi.tokensPerTask === null ? notRecorded : fmtCompact(Math.round(r.roi.tokensPerTask)),
+            )}
+            {metric(t('compare.errorRate'), (r) =>
+              r.roi.errorsPerHundredTasks === null
+                ? notRecorded
+                : r.roi.errorsPerHundredTasks.toFixed(1),
             )}
           </tbody>
         </table>

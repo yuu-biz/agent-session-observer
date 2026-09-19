@@ -189,8 +189,21 @@ export function SessionView({
           />
           <Stat
             label={t('session.cost')}
-            kind="measured"
-            value={detail.costUsd == null ? t('common.na') : fmtCost(detail.costUsd)}
+            kind={detail.costUsd != null ? 'measured' : 'estimate'}
+            value={
+              detail.costUsd != null
+                ? fmtCost(detail.costUsd)
+                : detail.estimatedCostUsd != null
+                  ? fmtCost(detail.estimatedCostUsd)
+                  : t('common.na')
+            }
+            sub={
+              detail.costUsd != null
+                ? t('overview.costBasisMeasured')
+                : detail.estimatedCostUsd != null
+                  ? t('overview.costBasisEstimated')
+                  : t('overview.costNone')
+            }
           />
         </Tiles>
 
@@ -210,6 +223,51 @@ export function SessionView({
           />
         </Tiles>
       </Panel>
+
+      {detail.modelCosts.length > 0 && (
+        <Panel title={t('cost.byModel')} flush>
+          <table className="grid">
+            <thead>
+              <tr>
+                <th>{t('cost.colModel')}</th>
+                <th className="num" style={{ width: 110 }}>
+                  {t('cost.colInput')}
+                </th>
+                <th className="num" style={{ width: 110 }}>
+                  {t('cost.colOutput')}
+                </th>
+                <th className="num" style={{ width: 120 }}>
+                  {t('cost.colCacheRead')}
+                </th>
+                <th className="num" style={{ width: 100 }}>
+                  {t('cost.colCost')}
+                </th>
+                <th style={{ width: 110 }}>{t('cost.colBasis')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {detail.modelCosts.map((m) => (
+                <tr key={m.model}>
+                  <td className="mono">{m.model}</td>
+                  <td className="num dim">{fmtCompact(m.tokens.input ?? 0)}</td>
+                  <td className="num dim">{fmtCompact(m.tokens.output ?? 0)}</td>
+                  <td className="num faint">{fmtCompact(m.tokens.cacheRead ?? 0)}</td>
+                  <td className="num">{m.costUsd == null ? t('common.na') : fmtCost(m.costUsd)}</td>
+                  <td>
+                    <span
+                      className={`badge ${
+                        m.basis === 'measured' ? 'measured' : m.basis === 'unpriced' ? '' : 'est'
+                      }`}
+                    >
+                      {t(`cost.basis.${m.basis}` as MessageKey)}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Panel>
+      )}
 
       {!hasMeasured && <div className="note">{t('session.noMeasured')}</div>}
 
