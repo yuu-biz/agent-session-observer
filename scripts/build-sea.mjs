@@ -32,6 +32,8 @@ import { fileURLToPath } from 'node:url';
 
 import { buildSync } from 'esbuild';
 
+import { buildIco } from './make-icons.mjs';
+
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const buildDir = path.join(root, 'build', 'sea');
 const distDir = path.join(root, 'dist');
@@ -108,6 +110,37 @@ run(process.execPath, ['--experimental-sea-config', configPath]);
 console.log('• copying the Node binary');
 const exePath = path.join(buildDir, outName);
 copyFileSync(process.execPath, exePath);
+
+/**
+ * Stamps the application icon into the copied binary.
+ *
+ * Done before the blob is injected: `postject` appends a section, so it is
+ * happy to work on an executable whose resources have already been rewritten,
+ * whereas rewriting resources afterwards would move a section the SEA loader
+ * has to find.
+ *
+ * A failure here is cosmetic — the app still runs, wearing Node's icon — so it
+ * warns rather than aborting a build that is otherwise complete.
+ */
+function setWindowsIcon(file) {
+  const icoPath = path.join(buildDir, 'app.ico');
+  writeFileSync(icoPath, buildIco());
+  const script = path.join(root, 'scripts', 'set-exe-icon.ps1');
+  return execFileSync(
+    'powershell',
+    ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', script, '-Exe', file, '-Ico', icoPath],
+    { cwd: root, encoding: 'utf8' },
+  ).trim();
+}
+
+if (process.platform === 'win32') {
+  try {
+    console.log(`• stamping the application icon (${setWindowsIcon(exePath)})`);
+  } catch (error) {
+    console.warn(`  ! could not set the icon: ${String(error.message).split(/\r?\n/)[0]}`);
+    console.warn("    the executable still works; it will show Node's icon in Explorer.");
+  }
+}
 
 // On macOS the binary is signed, and injecting into a signed Mach-O invalidates
 // the signature so hard that the OS refuses to run it. The signature has to be

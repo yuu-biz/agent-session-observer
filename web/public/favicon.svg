@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Agent Session Observer">
+  <rect x="0" y="0" width="64" height="64" rx="14" fill="#2d3642"/>
+  <rect x="1.5" y="1.5" width="61" height="61" rx="12.5" fill="#0c0f13"/>
+  <rect x="11" y="18" width="28" height="8" rx="4" fill="#37c98b"/>
+  <rect x="19" y="29" width="34" height="8" rx="4" fill="#9d7bff"/>
+  <rect x="11" y="40" width="21" height="8" rx="4" fill="#ffb000"/>
+  <rect x="42.5" y="10" width="3" height="44" rx="1.5" fill="#eef1f5"/>
+</svg>
