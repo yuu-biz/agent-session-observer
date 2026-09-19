@@ -22,7 +22,8 @@ node dist/cli/main.js --doctor    # show what auto discovery found
 ## Architecture boundaries
 
 ```
-core/       normalized model + analysis. Knows nothing about any provider.
+core/       normalized model + analysis, incl. the price list. Knows nothing
+            about any provider.
 adapters/   the ONLY provider-aware code.
 discovery/  where logs live. No parsing.
 indexer/    scanning, caching, incremental re-reads.
@@ -39,6 +40,11 @@ Two rules hold the design together:
    with timestamps; segments, idle, concurrency and liveness are computed in
    `core/`. This is what lets the idle threshold change without re-reading a
    single log file.
+3. **Only `core/pricing.ts` turns tokens into money.** An adapter reports the
+   dollars a provider wrote down and nothing else. Estimates live in their own
+   fields (`estimatedCostUsd`, `ModelCost.basis`) so they can never be read as
+   a measurement, and the price list is user-overridable through
+   `config.modelRates`.
 
 ## Adding a provider adapter
 
@@ -52,7 +58,13 @@ Implement `ProviderAdapter` (`src/core/types.ts`) and register it in
 - Keep everything that does not map cleanly in `providerMeta` rather than
   inventing normalized fields or dropping it.
 - Only report `measured.*` and `costUsd` when the provider **actually wrote the
-  number down**. Never derive cost from tokens × a price list.
+  number down**. Never derive cost from tokens × a price list — `core/pricing.ts`
+  does that, from `tokensByModel`, and labels the result as an estimate.
+- Fill `tokensByModel` with whatever model the log attributes usage to, and
+  `costByModel` only where the provider priced each model itself. Keep the
+  `TokenUsage` buckets **disjoint**: `input` is prompt tokens that missed the
+  cache, so a provider that reports cached tokens inside its input count must
+  subtract them in the adapter.
 - If the provider publishes a runtime marker, implement `collectLiveMarkers`.
 
 ## Semantics that must not be broken
@@ -65,6 +77,14 @@ These are the product, not implementation details:
   are different numbers. Never add, average, or substitute one for the other.
 - **Measured vs estimated** is always visible in the UI (`measured` / `est.`
   badges). Never present an estimate as a measurement.
+- **A session's cost is measured or estimated, never both.** If the provider
+  priced the session, its figure stands and nothing is estimated on top; a
+  total that is part fact and part guess is what the cost columns exist to
+  prevent.
+- **A ratio with no denominator is `n/a`, never `0`.** Cost per task on a day
+  with no prompts is not zero — a zero there averages into a budget.
+- A model with usage but no known rate is reported as **unpriced** and excluded
+  from totals. It is never counted as free.
 - A metric a provider does not record renders as **"not recorded"**, never `0`.
 - **Liveness always carries evidence and a confidence level.** Never assert that
   a session is running.
@@ -89,6 +109,26 @@ Violating any of these is a release blocker:
   distributions only.
 - Prompt text may be displayed locally; it must never be logged to stdout,
   written outside the cache, or sent anywhere.
+
+## Look and feel
+
+The UI is an instrument panel, not a web page: a fixed icon rail, hairline
+rules, and readouts in monospace. Three rules keep it coherent.
+
+- **Monospace carries every label, number and control**; the proportional face
+  is only for prose the user wrote and for explanatory notes. There are no web
+  fonts — the app makes no outbound requests — so this split is where the
+  interface gets its character.
+- **One signal colour.** Amber means *live, selected, or measured*. Mint is
+  Codex and violet is Claude Code, everywhere, so any chart identifies its
+  provider without a legend. Adding a fourth hue needs a reason.
+- **Colours are tokens in `web/src/styles.css`**, defined once for light and
+  swapped for dark. Components may use `var(--…)` inline; they must not contain
+  literal colours.
+
+The application mark is generated: `scripts/icon-spec.mjs` is the single source
+for the favicon and the Windows executable icon, and `npm run icons` rebuilds
+both. Do not hand-edit `web/public/favicon.svg`.
 
 ## Interface language
 
